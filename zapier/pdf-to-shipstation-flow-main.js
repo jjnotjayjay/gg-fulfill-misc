@@ -1,23 +1,31 @@
 const data = inputData || {};
-
+const SHIPSTATION_TAG_IDS = {
+  createdByZapier: 123078,
+  printSalesOrder: 123079,
+};
 const pdfUrl = getInputValue(['pdf_url']);
 
 const reviewReasons = [];
 const parsedOrder = getParsedOrder();
+const normalizedItemsResult = normalizeItems(parsedOrder && parsedOrder.items);
+const carrierCode = getCarrierCode(parsedOrder && parsedOrder.carrier);
 const routing = resolveRouting(parsedOrder);
-const shipstationOrder = normalizeOrder(parsedOrder, routing);
+const shipstationOrder = canCreateOrder(parsedOrder, normalizedItemsResult.items)
+  ? normalizeOrder(parsedOrder, routing, normalizedItemsResult.items, carrierCode)
+  : null;
 
 if (!parsedOrder) reviewReasons.push('Missing order inputs.');
-if (shipstationOrder && !shipstationOrder.orderNumber) reviewReasons.push('Missing order number.');
-if (shipstationOrder && !shipstationOrder.shipTo.name) reviewReasons.push('Missing ship-to name.');
-if (shipstationOrder && !shipstationOrder.shipTo.street1) reviewReasons.push('Missing ship-to street1.');
-if (shipstationOrder && !shipstationOrder.shipTo.city) reviewReasons.push('Missing ship-to city.');
-if (shipstationOrder && !shipstationOrder.shipTo.state) reviewReasons.push('Missing ship-to state.');
-if (shipstationOrder && !shipstationOrder.shipTo.postalCode) reviewReasons.push('Missing ship-to postal code.');
-if (shipstationOrder && !shipstationOrder.items.length) reviewReasons.push('Missing line items.');
+if (parsedOrder && !cleanString(parsedOrder.orderNumber)) reviewReasons.push('Missing order number.');
+if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.name)) reviewReasons.push('Missing ship-to name.');
+if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.street1)) reviewReasons.push('Missing ship-to street1.');
+if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.city)) reviewReasons.push('Missing ship-to city.');
+if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.state)) reviewReasons.push('Missing ship-to state.');
+if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.postalCode)) reviewReasons.push('Missing ship-to postal code.');
+if (parsedOrder && (!Array.isArray(parsedOrder.items) || !parsedOrder.items.length)) reviewReasons.push('Missing line items.');
+if (parsedOrder && cleanString(parsedOrder.carrier) && !carrierCode) reviewReasons.push('Unrecognized carrier: ' + cleanString(parsedOrder.carrier) + '.');
+if (normalizedItemsResult.issues.length) reviewReasons.push.apply(reviewReasons, normalizedItemsResult.issues);
 
 output = [{
-  shipstationOrderJson: JSON.stringify(shipstationOrder || {}),
   shipstationCreateOrderApiCallBody: JSON.stringify(shipstationOrder || {}),
   orderNumber: shipstationOrder ? shipstationOrder.orderNumber : '',
   storeId: routing ? routing.storeId : '',
@@ -30,20 +38,12 @@ function getParsedOrder() {
   const order = {
     orderNumber: getInputValue(['orderNumber', 'Order Number']),
     orderDate: getInputValue(['orderDate', 'Order Date']),
-    orderStatus: getInputValue(['orderStatus', 'Order Status']),
     customerUsername: getInputValue(['customerUsername', 'Customer Username']),
     customerEmail: getInputValue(['customerEmail', 'Customer Email']),
     customerNotes: getInputValue(['customerNotes', 'Customer Notes']),
-    paymentMethod: getInputValue(['paymentMethod', 'Payment Method']),
-    requestedShippingService: getInputValue(['requestedShippingService', 'Requested Shipping Service']),
     carrierCode: getInputValue(['carrierCode', 'Carrier Code']),
-    serviceCode: getInputValue(['serviceCode', 'Service Code']),
-    packageCode: getInputValue(['packageCode', 'Package Code']),
-    confirmation: getInputValue(['confirmation', 'Confirmation']),
     shipDate: getInputValue(['shipDate', 'Ship Date']),
-    holdUntilDate: getInputValue(['holdUntilDate', 'Hold Until Date']),
     sourceCompany: getInputValue(['sourceCompany', 'Source Company', 'storeName', 'Store Name']),
-    weight: getInputValue(['weight', 'Weight']),
     billTo: parseJson(getInputValue(['billTo', 'Bill To'])) || {},
     shipTo: parseJson(getInputValue(['shipTo', 'Ship To'])) || {},
     items: parseJson(getInputValue(['items', 'Items'])) || [],
@@ -55,16 +55,31 @@ function getParsedOrder() {
     advancedOptions: parseJson(getInputValue(['advancedOptions', 'Advanced Options'])) || {},
   };
 
-  return hasOrderData(order) ? order : null;
+  return hasAnyOrderData(order) ? order : null;
 }
 
-function hasOrderData(order) {
+function hasAnyOrderData(order) {
   return Boolean(
-    order.orderNumber ||
-    order.orderDate ||
-    order.sourceCompany ||
-    order.shipTo.name ||
-    order.items.length
+    order.orderNumber &&
+    order.orderDate &&
+    order.sourceCompany &&
+    order.shipTo?.name &&
+    order.items?.length
+  );
+}
+
+function canCreateOrder(order, normalizedItems) {
+  if (!order) return false;
+
+  return Boolean(
+    cleanString(order.orderNumber) &&
+    cleanString(order.shipTo && order.shipTo.name) &&
+    cleanString(order.shipTo && order.shipTo.street1) &&
+    cleanString(order.shipTo && order.shipTo.city) &&
+    cleanString(order.shipTo && order.shipTo.state) &&
+    cleanString(order.shipTo && order.shipTo.postalCode) &&
+    Array.isArray(normalizedItems) &&
+    normalizedItems.length
   );
 }
 
@@ -75,7 +90,7 @@ function parseJson(value) {
   try {
     return JSON.parse(value);
   } catch (error) {
-    const jsonText = String(value).match(/\{[\s\S]*\}/);
+    const jsonText = String(value).match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
     if (!jsonText) return null;
 
     try {
@@ -86,49 +101,287 @@ function parseJson(value) {
   }
 }
 
-function normalizeOrder(order, routing) {
+function normalizeOrder(order, routing, normalizedItems, carrierCode) {
   if (!order) return null;
   const sourceCompany = cleanString(order.sourceCompany);
-  const customField3Value = [routing && routing.generalTag, routing && routing.printSalesOrderTag]
-    .filter(Boolean)
-    .join(' | ');
-
-  return {
+  const normalizedOrder = {
     orderNumber: cleanString(order.orderNumber),
-    orderDate: cleanString(order.orderDate),
+    orderKey: buildOrderKey(routing, order),
+    orderDate: normalizeOrderDate(order.orderDate),
     orderStatus: 'on_hold',
     customerUsername: cleanString(order.customerUsername),
     customerEmail: cleanString(order.customerEmail),
-    customerNotes: cleanString(order.customerNotes),
+    customerNotes: pdfUrl || cleanString(order.customerNotes),
     internalNotes: "DEV TEST - DO NOT SHIP",
-    paymentMethod: cleanString(order.paymentMethod),
-    requestedShippingService: cleanString(order.requestedShippingService),
-    carrierCode: cleanString(order.carrierCode),
-    serviceCode: cleanString(order.serviceCode),
-    packageCode: cleanString(order.packageCode),
-    confirmation: cleanString(order.confirmation) || 'none',
-    shipDate: cleanString(order.shipDate),
-    holdUntilDate: cleanString(order.holdUntilDate),
-    weight: {
-      value: toNumber(order.weight && order.weight.value),
-      units: cleanString(order.weight && order.weight.units) || 'ounces',
-    },
+    carrierCode: getInputValue(['carrierCode', 'Carrier Code']),
+    shipDate: normalizeOptionalIsoDate(order.shipDate),
     billTo: normalizeAddress(order.billTo),
     shipTo: normalizeAddress(order.shipTo),
-    items: normalizeItems(order.items),
+    items: normalizedItems,
     amountPaid: toNumber(order.amountPaid),
     taxAmount: toNumber(order.taxAmount),
     shippingAmount: toNumber(order.shippingAmount),
     orderTotal: toNumber(order.orderTotal),
     poNumber: cleanString(order.poNumber),
+    tagIds: routing && Array.isArray(routing.tagIds) ? routing.tagIds : [],
     advancedOptions: {
       storeId: routing ? routing.storeId : null,
-      customField1: pdfUrl,
-      customField2: sourceCompany,
-      customField3: customField3Value,
-      source: cleanString(order.advancedOptions && order.advancedOptions.source) || 'Created by Zapier',
+      source: sourceCompany,
     },
   };
+
+  if (carrierCode) normalizedOrder.carrierCode = carrierCode;
+
+  return normalizedOrder;
+}
+
+function buildOrderKey(routing, order) {
+  const storeId = routing && routing.storeId;
+  const orderNumber = cleanString(order && order.orderNumber);
+
+  if (!storeId || !orderNumber) return '';
+
+  return String(storeId) + '-' + orderNumber;
+}
+
+
+function normalizeOrderDate(value) {
+  const orderDate = normalizeOptionalIsoDate(value);
+  if (orderDate) return orderDate;
+  return new Date().toISOString();
+}
+
+function normalizeOptionalIsoDate(value) {
+  const rawValue = cleanString(value);
+  if (!rawValue) return '';
+
+  const dateOnlyParts = parseDateOnlyValue(rawValue);
+  if (dateOnlyParts) {
+    return formatLosAngelesDateTime(
+      dateOnlyParts.year,
+      dateOnlyParts.month,
+      dateOnlyParts.day,
+      0,
+      0,
+      0
+    );
+  }
+
+  const parsedDate = parseDateValue(rawValue);
+  return parsedDate ? formatDateInTimeZone(parsedDate, 'America/Los_Angeles') : '';
+}
+
+function parseDateValue(value) {
+  const isoLikeMatch = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2})(?::(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?(Z|[+-]\d{2}:?\d{2})?)?$/
+  );
+  if (isoLikeMatch) {
+    if (!isoLikeMatch[4]) {
+      return createUtcDate(
+        Number(isoLikeMatch[1]),
+        Number(isoLikeMatch[2]),
+        Number(isoLikeMatch[3])
+      );
+    }
+
+    const normalizedValue = value.includes(' ') && !value.includes('T')
+      ? value.replace(' ', 'T')
+      : value;
+    const parsedIsoDate = new Date(normalizedValue);
+    if (!Number.isNaN(parsedIsoDate.getTime())) return parsedIsoDate;
+  }
+
+  const slashDateMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashDateMatch) {
+    return createUtcDate(
+      Number(slashDateMatch[3]),
+      Number(slashDateMatch[1]),
+      Number(slashDateMatch[2])
+    );
+  }
+
+  const dayMonthYearMatch = value.match(/^(\d{1,2})\s+([A-Za-z]+),\s*(\d{4})$/);
+  if (dayMonthYearMatch) {
+    return createUtcDate(
+      Number(dayMonthYearMatch[3]),
+      monthNameToNumber(dayMonthYearMatch[2]),
+      Number(dayMonthYearMatch[1])
+    );
+  }
+
+  const monthDayYearMatch = value.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/);
+  if (monthDayYearMatch) {
+    return createUtcDate(
+      Number(monthDayYearMatch[3]),
+      monthNameToNumber(monthDayYearMatch[1]),
+      Number(monthDayYearMatch[2])
+    );
+  }
+
+  return null;
+}
+
+function parseDateOnlyValue(value) {
+  const isoLikeDateOnlyMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoLikeDateOnlyMatch) {
+    return buildDateParts(
+      Number(isoLikeDateOnlyMatch[1]),
+      Number(isoLikeDateOnlyMatch[2]),
+      Number(isoLikeDateOnlyMatch[3])
+    );
+  }
+
+  const slashDateMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashDateMatch) {
+    return buildDateParts(
+      Number(slashDateMatch[3]),
+      Number(slashDateMatch[1]),
+      Number(slashDateMatch[2])
+    );
+  }
+
+  const dayMonthYearMatch = value.match(/^(\d{1,2})\s+([A-Za-z]+),\s*(\d{4})$/);
+  if (dayMonthYearMatch) {
+    return buildDateParts(
+      Number(dayMonthYearMatch[3]),
+      monthNameToNumber(dayMonthYearMatch[2]),
+      Number(dayMonthYearMatch[1])
+    );
+  }
+
+  const monthDayYearMatch = value.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/);
+  if (monthDayYearMatch) {
+    return buildDateParts(
+      Number(monthDayYearMatch[3]),
+      monthNameToNumber(monthDayYearMatch[1]),
+      Number(monthDayYearMatch[2])
+    );
+  }
+
+  return null;
+}
+
+function buildDateParts(year, month, day) {
+  const date = createUtcDate(year, month, day);
+  if (!date) return null;
+
+  return { year, month, day };
+}
+
+function monthNameToNumber(value) {
+  const monthMap = {
+    jan: 1,
+    january: 1,
+    feb: 2,
+    february: 2,
+    mar: 3,
+    march: 3,
+    apr: 4,
+    april: 4,
+    may: 5,
+    jun: 6,
+    june: 6,
+    jul: 7,
+    july: 7,
+    aug: 8,
+    august: 8,
+    sep: 9,
+    sept: 9,
+    september: 9,
+    oct: 10,
+    october: 10,
+    nov: 11,
+    november: 11,
+    dec: 12,
+    december: 12,
+  };
+
+  return monthMap[cleanString(value).toLowerCase()] || 0;
+}
+
+function createUtcDate(year, month, day) {
+  if (!year || !month || !day) return null;
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+function formatDateInTimeZone(date, timeZone) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+    timeZoneName: 'shortOffset',
+  });
+  const parts = getFormatterParts(formatter, date);
+
+  return (
+    parts.year + '-' +
+    parts.month + '-' +
+    parts.day + 'T' +
+    parts.hour + ':' +
+    parts.minute + ':' +
+    parts.second +
+    normalizeOffset(parts.timeZoneName)
+  );
+}
+
+function formatLosAngelesDateTime(year, month, day, hour, minute, second) {
+  const offset = getLosAngelesOffset(year, month, day);
+
+  return (
+    padNumber(year, 4) + '-' +
+    padNumber(month, 2) + '-' +
+    padNumber(day, 2) + 'T' +
+    padNumber(hour, 2) + ':' +
+    padNumber(minute, 2) + ':' +
+    padNumber(second, 2) +
+    offset
+  );
+}
+
+function getLosAngelesOffset(year, month, day) {
+  const sampleUtcDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    timeZoneName: 'shortOffset',
+  });
+  const parts = getFormatterParts(formatter, sampleUtcDate);
+
+  return normalizeOffset(parts.timeZoneName);
+}
+
+function getFormatterParts(formatter, date) {
+  return formatter.formatToParts(date).reduce(function(parts, item) {
+    if (item.type !== 'literal') parts[item.type] = item.value;
+    return parts;
+  }, {});
+}
+
+function normalizeOffset(value) {
+  if (!value || value === 'GMT' || value === 'UTC') return 'Z';
+
+  const match = value.match(/([+-])(\d{1,2})(?::?(\d{2}))?$/);
+  if (!match) return 'Z';
+
+  return match[1] + padNumber(match[2], 2) + ':' + padNumber(match[3] || '00', 2);
+}
+
+function padNumber(value, length) {
+  return String(value).padStart(length, '0');
 }
 
 function resolveRouting(order) {
@@ -136,62 +389,79 @@ function resolveRouting(order) {
   const normalizedSourceCompany = normalizeForMatch(sourceCompany);
   const routes = [
     {
-      sourceCompany: 'New Enterprises',
+      sourceCompanies: ['New Enterprises'],
       storeName: 'New Enterprises Co',
-      storeId: 1,
+      storeId: 515242,
+      tagIds: [SHIPSTATION_TAG_IDS.createdByZapier],
     },
     {
-      sourceCompany: 'Kola Goodies',
-      storeName: 'Kola Goodes Manual',
-      storeId:2,
-      printSalesOrderTag: 'Print Sales Order',
+      sourceCompanies: ['Kola Goodies'],
+      storeName: 'Kola Goodies Manual',
+      storeId:490139,
+      tagIds: [
+        SHIPSTATION_TAG_IDS.createdByZapier,
+        SHIPSTATION_TAG_IDS.printSalesOrder,
+      ],
     },
     {
-      sourceCompany: 'Mobi USA LLC',
+      sourceCompanies: ['Mobi USA LLC', 'Mobi USA', 'Mobi'],
       storeName: 'Mobi USA Quickbooks',
-      storeId:3,
+      storeId:511893,
+      tagIds: [SHIPSTATION_TAG_IDS.createdByZapier],
     },
     {
-      sourceCompany: 'munchrooms',
+      sourceCompanies: ['munchrooms', 'Munchrooms'],
       storeName: 'Munchrooms Manual',
-      storeId:4,
-      printSalesOrderTag: 'Print Sales Order',
+      storeId:473886,
+      tagIds: [
+        SHIPSTATION_TAG_IDS.createdByZapier,
+        SHIPSTATION_TAG_IDS.printSalesOrder,
+      ],
     },
   ];
 
+  const defaultStore = {
+    storeName: 'Golden Gate Fulfillment',
+    storeId: 452106,
+    tagIds: [SHIPSTATION_TAG_IDS.createdByZapier],
+  };
+
   for (const route of routes) {
-    if (normalizedSourceCompany === normalizeForMatch(route.sourceCompany)) {
+    if (matchesSourceCompany(route.sourceCompanies, normalizedSourceCompany)) {
       return buildRoutingResult(route, 'sourceCompany');
     }
   }
 
-  return {
-    storeName: 'Golden Gate Fulfillment',
-    storeId: 5,
-  };
+  return defaultStore;
 }
 
 function buildRoutingResult(route, matchedBy) {
-  const generalTag = 'Created by Zapier';
-  const tagNames = [generalTag];
-
-  if (route.printSalesOrderTag) {
-    tagNames.push(route.printSalesOrderTag);
-  }
+  const sourceCompanies = Array.isArray(route.sourceCompanies)
+    ? route.sourceCompanies.filter(Boolean)
+    : [];
 
   return {
-    sourceCompany: route.sourceCompany,
+    sourceCompany: sourceCompanies[0] || '',
+    sourceCompanies,
     matchedBy,
     storeName: route.storeName,
     storeId: route.storeId,
-    generalTag,
-    printSalesOrderTag: route.printSalesOrderTag || '',
-    tagNames,
+    tagIds: Array.isArray(route.tagIds)
+      ? route.tagIds.filter((tagId) => Number.isInteger(tagId))
+      : [],
   };
 }
 
+function matchesSourceCompany(sourceCompanies, normalizedSourceCompany) {
+  if (!normalizedSourceCompany || !Array.isArray(sourceCompanies)) return false;
+
+  return sourceCompanies.some(
+    (sourceCompany) => normalizeForMatch(sourceCompany) === normalizedSourceCompany
+  );
+}
+
 function normalizeAddress(address) {
-  address = address || {};
+  address ??= {};
 
   return {
     name: cleanString(address.name),
@@ -207,16 +477,51 @@ function normalizeAddress(address) {
 }
 
 function normalizeItems(items) {
-  if (!Array.isArray(items)) return [];
+  if (!Array.isArray(items)) {
+    return {
+      items: [],
+      issues: ['Items payload is not a valid array.'],
+    };
+  }
 
-  return items
-    .map((item) => ({
-      sku: cleanString(item.sku),
-      name: cleanString(item.name),
-      quantity: toNumber(item.quantity),
-      unitPrice: toNumber(item.unitPrice || item.unit_price),
-    }))
-    .filter((item) => item.sku || item.name);
+  const normalizedItems = [];
+  const issues = [];
+
+  items.forEach((item, index) => {
+    const sku = cleanString(item && item.sku);
+    const name = cleanString(item && item.name);
+    const quantity = parseNumberOrNull(item && item.quantity);
+    const unitPrice = parseNumberOrNull(item && item.unitPrice);
+    const missingFields = [];
+
+    if (!sku) missingFields.push('sku');
+    if (!name) missingFields.push('name');
+    if (quantity === null) missingFields.push('quantity');
+    if (unitPrice === null) missingFields.push('unitPrice');
+
+    if (missingFields.length) {
+      issues.push(
+        'Line item ' +
+          (index + 1) +
+          ' skipped: missing or invalid ' +
+          missingFields.join(', ') +
+          '.'
+      );
+      return;
+    }
+
+    normalizedItems.push({
+      sku,
+      name,
+      quantity,
+      unitPrice,
+    });
+  });
+
+  return {
+    items: normalizedItems,
+    issues,
+  };
 }
 
 function getInputValue(names) {
@@ -241,8 +546,34 @@ function normalizeForMatch(value) {
     .trim();
 }
 
+function getCarrierCode(value) {
+  const normalizedCarrier = normalizeForMatch(value);
+  if (!normalizedCarrier) return '';
+
+  const carrierMap = {
+    fedex: 'fedex',
+    'federal express': 'fedex',
+    ups: 'ups',
+    'united parcel service': 'ups',
+    usps: 'usps',
+    'united states postal service': 'usps',
+    dhl: 'dhl_express',
+    'dhl express': 'dhl_express',
+    ontrac: 'ontrac',
+    'canada post': 'canada_post',
+  };
+
+  return carrierMap[normalizedCarrier] || '';
+}
+
 function toNumber(value) {
   if (value === null || value === undefined || value === '') return 0;
   const number = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
   return Number.isNaN(number) ? 0 : number;
+}
+
+function parseNumberOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
+  return Number.isNaN(number) ? null : number;
 }
