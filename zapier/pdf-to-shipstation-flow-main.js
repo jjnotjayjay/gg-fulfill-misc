@@ -49,21 +49,20 @@ const pdfUrl = getInputValue(['pdf_url']);
 const reviewReasons = [];
 const parsedOrder = getParsedOrder();
 const normalizedItemsResult = normalizeItems(parsedOrder && parsedOrder.items);
-const carrierCode = getCarrierCode(parsedOrder && parsedOrder.carrierCode);
+const normalizedCarrierCode = getCarrierCode(parsedOrder && parsedOrder.carrierCode);
 const routing = resolveRouting(parsedOrder);
 const shipstationOrder = canCreateOrder(parsedOrder, normalizedItemsResult.items)
-  ? normalizeOrder(parsedOrder, routing, normalizedItemsResult.items, carrierCode)
+  ? normalizeOrder(parsedOrder, routing, normalizedItemsResult.items, normalizedCarrierCode)
   : null;
 
 if (!parsedOrder) reviewReasons.push('Missing order inputs.');
 if (parsedOrder && !cleanString(parsedOrder.orderNumber)) reviewReasons.push('Missing order number.');
-if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.name)) reviewReasons.push('Missing ship-to name.');
 if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.street1)) reviewReasons.push('Missing ship-to street1.');
 if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.city)) reviewReasons.push('Missing ship-to city.');
 if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.state)) reviewReasons.push('Missing ship-to state.');
 if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.postalCode)) reviewReasons.push('Missing ship-to postal code.');
 if (parsedOrder && (!Array.isArray(parsedOrder.items) || !parsedOrder.items.length)) reviewReasons.push('Missing line items.');
-if (parsedOrder && cleanString(parsedOrder.carrierCode) && !carrierCode) reviewReasons.push('Unrecognized carrierCode: ' + cleanString(parsedOrder.carrierCode) + '.');
+if (parsedOrder && cleanString(parsedOrder.carrierCode) && !normalizedCarrierCode) reviewReasons.push('Unrecognized carrierCode: ' + cleanString(parsedOrder.carrierCode) + '.');
 if (normalizedItemsResult.issues.length) reviewReasons.push.apply(reviewReasons, normalizedItemsResult.issues);
 
 output = [{
@@ -82,6 +81,7 @@ function getParsedOrder() {
     customerUsername: getInputValue(['customerUsername', 'Customer Username']),
     customerEmail: getInputValue(['customerEmail', 'Customer Email']),
     customerNotes: getInputValue(['customerNotes', 'Customer Notes']),
+    internalNotes: getInputValue(['internalNotes', 'Internal Notes']),
     carrierCode: getInputValue(['carrierCode', 'Carrier Code']),
     shipDate: getInputValue(['shipDate', 'Ship Date']),
     sourceCompany: getInputValue(['sourceCompany', 'Source Company', 'storeName', 'Store Name']),
@@ -101,10 +101,8 @@ function getParsedOrder() {
 
 function hasAnyOrderData(order) {
   return Boolean(
-    order.orderNumber &&
-    order.orderDate &&
-    order.sourceCompany &&
-    order.shipTo?.name &&
+    cleanString(order.orderNumber) &&
+    cleanString(order.shipTo && order.shipTo.street1) &&
     order.items?.length
   );
 }
@@ -114,7 +112,6 @@ function canCreateOrder(order, normalizedItems) {
 
   return Boolean(
     cleanString(order.orderNumber) &&
-    cleanString(order.shipTo && order.shipTo.name) &&
     cleanString(order.shipTo && order.shipTo.street1) &&
     cleanString(order.shipTo && order.shipTo.city) &&
     cleanString(order.shipTo && order.shipTo.state) &&
@@ -142,7 +139,7 @@ function parseJson(value) {
   }
 }
 
-function normalizeOrder(order, routing, normalizedItems, carrierCode) {
+function normalizeOrder(order, routing, normalizedItems, normalizedCarrierCode) {
   if (!order) return null;
   const sourceCompany = cleanString(order.sourceCompany);
   const normalizedOrder = {
@@ -152,9 +149,8 @@ function normalizeOrder(order, routing, normalizedItems, carrierCode) {
     orderStatus: 'on_hold',
     customerUsername: cleanString(order.customerUsername),
     customerEmail: cleanString(order.customerEmail),
-    customerNotes: pdfUrl || cleanString(order.customerNotes),
-    internalNotes: "DEV TEST - DO NOT SHIP",
-    carrierCode: getInputValue(['carrierCode', 'Carrier Code']),
+    customerNotes: cleanString(order.customerNotes),
+    internalNotes: [pdfUrl, cleanString(order.internalNotes), 'DEV TEST - DO NOT SHIP'].filter(Boolean).join('\n'),
     shipDate: normalizeOptionalIsoDate(order.shipDate),
     billTo: normalizeAddress(order.billTo),
     shipTo: normalizeAddress(order.shipTo),
@@ -171,7 +167,7 @@ function normalizeOrder(order, routing, normalizedItems, carrierCode) {
     },
   };
 
-  if (carrierCode) normalizedOrder.carrierCode = carrierCode;
+  if (normalizedCarrierCode) normalizedOrder.carrierCode = normalizedCarrierCode;
 
   return normalizedOrder;
 }
@@ -521,8 +517,16 @@ function getCarrierCode(value) {
     ontrac: 'ontrac',
     'canada post': 'canada_post',
   };
+  if (carrierMap[normalizedCarrier]) {
+    return carrierMap[normalizedCarrier];
+  }
+  for (const alias in carrierMap) {
+    if (normalizedCarrier.includes(alias)) {
+      return carrierMap[alias];
+    }
+  }
 
-  return carrierMap[normalizedCarrier] || '';
+  return '';
 }
 
 function toNumber(value) {
