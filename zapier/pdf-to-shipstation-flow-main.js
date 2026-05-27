@@ -3,6 +3,47 @@ const SHIPSTATION_TAG_IDS = {
   createdByZapier: 123078,
   printSalesOrder: 123079,
 };
+const LOS_ANGELES_DATE_TIME_FORMATTER = new Intl.DateTimeFormat('sv-SE', {
+  timeZone: 'America/Los_Angeles',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+  timeZoneName: 'shortOffset',
+});
+const LOS_ANGELES_OFFSET_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/Los_Angeles',
+  timeZoneName: 'shortOffset',
+});
+const MONTH_NUMBERS = {
+  jan: 1,
+  january: 1,
+  feb: 2,
+  february: 2,
+  mar: 3,
+  march: 3,
+  apr: 4,
+  april: 4,
+  may: 5,
+  jun: 6,
+  june: 6,
+  jul: 7,
+  july: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  sept: 9,
+  september: 9,
+  oct: 10,
+  october: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12,
+};
 const pdfUrl = getInputValue(['pdf_url']);
 
 const reviewReasons = [];
@@ -107,14 +148,14 @@ function normalizeOrder(order, routing, normalizedItems, carrierCode) {
   const normalizedOrder = {
     orderNumber: cleanString(order.orderNumber),
     orderKey: buildOrderKey(routing, order),
-    orderDate: checkDateFormat(order.orderDate),
+    orderDate: normalizeOrderDate(order.orderDate),
     orderStatus: 'on_hold',
     customerUsername: cleanString(order.customerUsername),
     customerEmail: cleanString(order.customerEmail),
     customerNotes: pdfUrl || cleanString(order.customerNotes),
     internalNotes: "DEV TEST - DO NOT SHIP",
     carrierCode: getInputValue(['carrierCode', 'Carrier Code']),
-    shipDate: checkDateFormat(order.shipDate),
+    shipDate: normalizeOptionalIsoDate(order.shipDate),
     billTo: normalizeAddress(order.billTo),
     shipTo: normalizeAddress(order.shipTo),
     items: normalizedItems,
@@ -142,6 +183,164 @@ function buildOrderKey(routing, order) {
   if (!storeId || !orderNumber) return '';
 
   return String(storeId) + '-' + orderNumber;
+}
+
+
+function normalizeOrderDate(value) {
+  const orderDate = normalizeOptionalIsoDate(value);
+  if (orderDate) return orderDate;
+  return formatPstDateTime(new Date());
+}
+
+function normalizeOptionalIsoDate(value) {
+  const rawValue = cleanString(value);
+  if (!rawValue) return '';
+
+  const parsedValue = parseSupportedDateValue(rawValue);
+  if (!parsedValue) return '';
+
+  if (parsedValue.type === 'dateOnly') {
+    return formatLosAngelesDateOnly(parsedValue);
+  }
+
+  return formatLosAngelesDateTime(parsedValue.date);
+}
+
+function parseSupportedDateValue(value) {
+  const isoLikeMatch = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2})(?::(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?(Z|[+-]\d{2}:?\d{2})?)?$/
+  );
+  if (isoLikeMatch) {
+    if (!isoLikeMatch[4]) {
+      return buildDateOnlyResult(
+        Number(isoLikeMatch[1]),
+        Number(isoLikeMatch[2]),
+        Number(isoLikeMatch[3])
+      );
+    }
+
+    const normalizedValue = value.includes(' ') && !value.includes('T')
+      ? value.replace(' ', 'T')
+      : value;
+    const parsedIsoDate = new Date(normalizedValue);
+    if (!Number.isNaN(parsedIsoDate.getTime())) {
+      return { type: 'dateTime', date: parsedIsoDate };
+    }
+  }
+
+  return parseDateOnlyText(value);
+}
+
+function parseDateOnlyText(value) {
+  const slashDateMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashDateMatch) {
+    return buildDateOnlyResult(
+      Number(slashDateMatch[3]),
+      Number(slashDateMatch[1]),
+      Number(slashDateMatch[2])
+    );
+  }
+
+  const dayMonthYearMatch = value.match(/^(\d{1,2})\s+([A-Za-z]+),\s*(\d{4})$/);
+  if (dayMonthYearMatch) {
+    return buildDateOnlyResult(
+      Number(dayMonthYearMatch[3]),
+      monthNameToNumber(dayMonthYearMatch[2]),
+      Number(dayMonthYearMatch[1])
+    );
+  }
+
+  const monthDayYearMatch = value.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/);
+  if (monthDayYearMatch) {
+    return buildDateOnlyResult(
+      Number(monthDayYearMatch[3]),
+      monthNameToNumber(monthDayYearMatch[1]),
+      Number(monthDayYearMatch[2])
+    );
+  }
+
+  return null;
+}
+
+function buildDateOnlyResult(year, month, day) {
+  if (!isValidDateParts(year, month, day)) return null;
+
+  return {
+    type: 'dateOnly',
+    year,
+    month,
+    day,
+  };
+}
+
+function monthNameToNumber(value) {
+  return MONTH_NUMBERS[cleanString(value).toLowerCase()] || 0;
+}
+
+function isValidDateParts(year, month, day) {
+  if (!year || !month || !day) return false;
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function formatPstDateTime(date) {
+  return formatLosAngelesDateTime(date);
+}
+
+function formatLosAngelesDateOnly(dateParts) {
+  return (
+    padNumber(dateParts.year, 4) + '-' +
+    padNumber(dateParts.month, 2) + '-' +
+    padNumber(dateParts.day, 2) +
+    'T00:00:00' +
+    getLosAngelesOffset(dateParts.year, dateParts.month, dateParts.day)
+  );
+}
+
+function formatLosAngelesDateTime(date) {
+  const parts = getFormatterParts(LOS_ANGELES_DATE_TIME_FORMATTER, date);
+
+  return (
+    parts.year + '-' +
+    parts.month + '-' +
+    parts.day + 'T' +
+    parts.hour + ':' +
+    parts.minute + ':' +
+    parts.second +
+    normalizeOffset(parts.timeZoneName)
+  );
+}
+
+function getLosAngelesOffset(year, month, day) {
+  const sampleUtcDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  const parts = getFormatterParts(LOS_ANGELES_OFFSET_FORMATTER, sampleUtcDate);
+
+  return normalizeOffset(parts.timeZoneName);
+}
+
+function getFormatterParts(formatter, date) {
+  return formatter.formatToParts(date).reduce(function(parts, item) {
+    if (item.type !== 'literal') parts[item.type] = item.value;
+    return parts;
+  }, {});
+}
+
+function normalizeOffset(value) {
+  if (!value || value === 'GMT' || value === 'UTC') return 'Z';
+
+  const match = value.match(/([+-])(\d{1,2})(?::?(\d{2}))?$/);
+  if (!match) return 'Z';
+
+  return match[1] + padNumber(match[2], 2) + ':' + padNumber(match[3] || '00', 2);
+}
+
+function padNumber(value, length) {
+  return String(value).padStart(length, '0');
 }
 
 function resolveRouting(order) {
@@ -336,19 +535,4 @@ function parseNumberOrNull(value) {
   if (value === null || value === undefined || value === '') return null;
   const number = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
   return Number.isNaN(number) ? null : number;
-}
-
-function checkDateFormat(value) {
-  const normalizedValue = cleanString(value);
-  const isoDateTimeWithOffsetPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/;
-
-  if (!isoDateTimeWithOffsetPattern.test(normalizedValue)) {
-    throw new Error(
-      'Invalid date format: "' +
-        normalizedValue +
-        '". Expected format like 2025-12-15T00:00:00-08:00.'
-    );
-  }
-
-  return normalizedValue;
 }
