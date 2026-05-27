@@ -8,7 +8,7 @@ const pdfUrl = getInputValue(['pdf_url']);
 const reviewReasons = [];
 const parsedOrder = getParsedOrder();
 const normalizedItemsResult = normalizeItems(parsedOrder && parsedOrder.items);
-const carrierCode = getCarrierCode(parsedOrder && parsedOrder.carrier);
+const carrierCode = getCarrierCode(parsedOrder && parsedOrder.carrierCode);
 const routing = resolveRouting(parsedOrder);
 const shipstationOrder = canCreateOrder(parsedOrder, normalizedItemsResult.items)
   ? normalizeOrder(parsedOrder, routing, normalizedItemsResult.items, carrierCode)
@@ -22,7 +22,7 @@ if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.city)) 
 if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.state)) reviewReasons.push('Missing ship-to state.');
 if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.postalCode)) reviewReasons.push('Missing ship-to postal code.');
 if (parsedOrder && (!Array.isArray(parsedOrder.items) || !parsedOrder.items.length)) reviewReasons.push('Missing line items.');
-if (parsedOrder && cleanString(parsedOrder.carrier) && !carrierCode) reviewReasons.push('Unrecognized carrier: ' + cleanString(parsedOrder.carrier) + '.');
+if (parsedOrder && cleanString(parsedOrder.carrierCode) && !carrierCode) reviewReasons.push('Unrecognized carrierCode: ' + cleanString(parsedOrder.carrierCode) + '.');
 if (normalizedItemsResult.issues.length) reviewReasons.push.apply(reviewReasons, normalizedItemsResult.issues);
 
 output = [{
@@ -107,14 +107,14 @@ function normalizeOrder(order, routing, normalizedItems, carrierCode) {
   const normalizedOrder = {
     orderNumber: cleanString(order.orderNumber),
     orderKey: buildOrderKey(routing, order),
-    orderDate: normalizeOrderDate(order.orderDate),
+    orderDate: checkDateFormat(order.orderDate),
     orderStatus: 'on_hold',
     customerUsername: cleanString(order.customerUsername),
     customerEmail: cleanString(order.customerEmail),
     customerNotes: pdfUrl || cleanString(order.customerNotes),
     internalNotes: "DEV TEST - DO NOT SHIP",
     carrierCode: getInputValue(['carrierCode', 'Carrier Code']),
-    shipDate: normalizeOptionalIsoDate(order.shipDate),
+    shipDate: checkDateFormat(order.shipDate),
     billTo: normalizeAddress(order.billTo),
     shipTo: normalizeAddress(order.shipTo),
     items: normalizedItems,
@@ -142,246 +142,6 @@ function buildOrderKey(routing, order) {
   if (!storeId || !orderNumber) return '';
 
   return String(storeId) + '-' + orderNumber;
-}
-
-
-function normalizeOrderDate(value) {
-  const orderDate = normalizeOptionalIsoDate(value);
-  if (orderDate) return orderDate;
-  return new Date().toISOString();
-}
-
-function normalizeOptionalIsoDate(value) {
-  const rawValue = cleanString(value);
-  if (!rawValue) return '';
-
-  const dateOnlyParts = parseDateOnlyValue(rawValue);
-  if (dateOnlyParts) {
-    return formatLosAngelesDateTime(
-      dateOnlyParts.year,
-      dateOnlyParts.month,
-      dateOnlyParts.day,
-      0,
-      0,
-      0
-    );
-  }
-
-  const parsedDate = parseDateValue(rawValue);
-  return parsedDate ? formatDateInTimeZone(parsedDate, 'America/Los_Angeles') : '';
-}
-
-function parseDateValue(value) {
-  const isoLikeMatch = value.match(
-    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2})(?::(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?(Z|[+-]\d{2}:?\d{2})?)?$/
-  );
-  if (isoLikeMatch) {
-    if (!isoLikeMatch[4]) {
-      return createUtcDate(
-        Number(isoLikeMatch[1]),
-        Number(isoLikeMatch[2]),
-        Number(isoLikeMatch[3])
-      );
-    }
-
-    const normalizedValue = value.includes(' ') && !value.includes('T')
-      ? value.replace(' ', 'T')
-      : value;
-    const parsedIsoDate = new Date(normalizedValue);
-    if (!Number.isNaN(parsedIsoDate.getTime())) return parsedIsoDate;
-  }
-
-  const slashDateMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (slashDateMatch) {
-    return createUtcDate(
-      Number(slashDateMatch[3]),
-      Number(slashDateMatch[1]),
-      Number(slashDateMatch[2])
-    );
-  }
-
-  const dayMonthYearMatch = value.match(/^(\d{1,2})\s+([A-Za-z]+),\s*(\d{4})$/);
-  if (dayMonthYearMatch) {
-    return createUtcDate(
-      Number(dayMonthYearMatch[3]),
-      monthNameToNumber(dayMonthYearMatch[2]),
-      Number(dayMonthYearMatch[1])
-    );
-  }
-
-  const monthDayYearMatch = value.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/);
-  if (monthDayYearMatch) {
-    return createUtcDate(
-      Number(monthDayYearMatch[3]),
-      monthNameToNumber(monthDayYearMatch[1]),
-      Number(monthDayYearMatch[2])
-    );
-  }
-
-  return null;
-}
-
-function parseDateOnlyValue(value) {
-  const isoLikeDateOnlyMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (isoLikeDateOnlyMatch) {
-    return buildDateParts(
-      Number(isoLikeDateOnlyMatch[1]),
-      Number(isoLikeDateOnlyMatch[2]),
-      Number(isoLikeDateOnlyMatch[3])
-    );
-  }
-
-  const slashDateMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (slashDateMatch) {
-    return buildDateParts(
-      Number(slashDateMatch[3]),
-      Number(slashDateMatch[1]),
-      Number(slashDateMatch[2])
-    );
-  }
-
-  const dayMonthYearMatch = value.match(/^(\d{1,2})\s+([A-Za-z]+),\s*(\d{4})$/);
-  if (dayMonthYearMatch) {
-    return buildDateParts(
-      Number(dayMonthYearMatch[3]),
-      monthNameToNumber(dayMonthYearMatch[2]),
-      Number(dayMonthYearMatch[1])
-    );
-  }
-
-  const monthDayYearMatch = value.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/);
-  if (monthDayYearMatch) {
-    return buildDateParts(
-      Number(monthDayYearMatch[3]),
-      monthNameToNumber(monthDayYearMatch[1]),
-      Number(monthDayYearMatch[2])
-    );
-  }
-
-  return null;
-}
-
-function buildDateParts(year, month, day) {
-  const date = createUtcDate(year, month, day);
-  if (!date) return null;
-
-  return { year, month, day };
-}
-
-function monthNameToNumber(value) {
-  const monthMap = {
-    jan: 1,
-    january: 1,
-    feb: 2,
-    february: 2,
-    mar: 3,
-    march: 3,
-    apr: 4,
-    april: 4,
-    may: 5,
-    jun: 6,
-    june: 6,
-    jul: 7,
-    july: 7,
-    aug: 8,
-    august: 8,
-    sep: 9,
-    sept: 9,
-    september: 9,
-    oct: 10,
-    october: 10,
-    nov: 11,
-    november: 11,
-    dec: 12,
-    december: 12,
-  };
-
-  return monthMap[cleanString(value).toLowerCase()] || 0;
-}
-
-function createUtcDate(year, month, day) {
-  if (!year || !month || !day) return null;
-
-  const date = new Date(Date.UTC(year, month - 1, day));
-  if (
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day
-  ) {
-    return null;
-  }
-
-  return date;
-}
-
-function formatDateInTimeZone(date, timeZone) {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hourCycle: 'h23',
-    timeZoneName: 'shortOffset',
-  });
-  const parts = getFormatterParts(formatter, date);
-
-  return (
-    parts.year + '-' +
-    parts.month + '-' +
-    parts.day + 'T' +
-    parts.hour + ':' +
-    parts.minute + ':' +
-    parts.second +
-    normalizeOffset(parts.timeZoneName)
-  );
-}
-
-function formatLosAngelesDateTime(year, month, day, hour, minute, second) {
-  const offset = getLosAngelesOffset(year, month, day);
-
-  return (
-    padNumber(year, 4) + '-' +
-    padNumber(month, 2) + '-' +
-    padNumber(day, 2) + 'T' +
-    padNumber(hour, 2) + ':' +
-    padNumber(minute, 2) + ':' +
-    padNumber(second, 2) +
-    offset
-  );
-}
-
-function getLosAngelesOffset(year, month, day) {
-  const sampleUtcDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Los_Angeles',
-    timeZoneName: 'shortOffset',
-  });
-  const parts = getFormatterParts(formatter, sampleUtcDate);
-
-  return normalizeOffset(parts.timeZoneName);
-}
-
-function getFormatterParts(formatter, date) {
-  return formatter.formatToParts(date).reduce(function(parts, item) {
-    if (item.type !== 'literal') parts[item.type] = item.value;
-    return parts;
-  }, {});
-}
-
-function normalizeOffset(value) {
-  if (!value || value === 'GMT' || value === 'UTC') return 'Z';
-
-  const match = value.match(/([+-])(\d{1,2})(?::?(\d{2}))?$/);
-  if (!match) return 'Z';
-
-  return match[1] + padNumber(match[2], 2) + ':' + padNumber(match[3] || '00', 2);
-}
-
-function padNumber(value, length) {
-  return String(value).padStart(length, '0');
 }
 
 function resolveRouting(order) {
@@ -576,4 +336,19 @@ function parseNumberOrNull(value) {
   if (value === null || value === undefined || value === '') return null;
   const number = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
   return Number.isNaN(number) ? null : number;
+}
+
+function checkDateFormat(value) {
+  const normalizedValue = cleanString(value);
+  const isoDateTimeWithOffsetPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/;
+
+  if (!isoDateTimeWithOffsetPattern.test(normalizedValue)) {
+    throw new Error(
+      'Invalid date format: "' +
+        normalizedValue +
+        '". Expected format like 2025-12-15T00:00:00-08:00.'
+    );
+  }
+
+  return normalizedValue;
 }
