@@ -1,5 +1,6 @@
 const data = inputData || {};
 const SHIPSTATION_TAG_IDS = {
+  clientRequestedCarrier: 123133,
   createdByZapier: 123078,
   printSalesOrder: 123079,
 };
@@ -160,7 +161,7 @@ function normalizeOrder(order, routing, normalizedItems, normalizedCarrierCode) 
     shippingAmount: toNumber(order.shippingAmount),
     orderTotal: toNumber(order.orderTotal),
     poNumber: cleanString(order.poNumber),
-    tagIds: routing && Array.isArray(routing.tagIds) ? routing.tagIds : [],
+    tagIds: buildTagIds(routing, normalizedCarrierCode),
     advancedOptions: {
       storeId: routing ? routing.storeId : null,
       source: sourceCompany,
@@ -170,6 +171,16 @@ function normalizeOrder(order, routing, normalizedItems, normalizedCarrierCode) 
   if (normalizedCarrierCode) normalizedOrder.carrierCode = normalizedCarrierCode;
 
   return normalizedOrder;
+}
+
+function buildTagIds(routing, normalizedCarrierCode) {
+  const tagIds = routing && Array.isArray(routing.tagIds) ? routing.tagIds.slice() : [];
+
+  if (normalizedCarrierCode && !tagIds.includes(SHIPSTATION_TAG_IDS.clientRequestedCarrier)) {
+    tagIds.push(SHIPSTATION_TAG_IDS.clientRequestedCarrier);
+  }
+
+  return tagIds;
 }
 
 function buildOrderKey(routing, order) {
