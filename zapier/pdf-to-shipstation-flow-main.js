@@ -1,5 +1,6 @@
 const data = inputData || {};
 const SHIPSTATION_TAG_IDS = {
+  billToThirdParty: 123204,
   clientRequestedCarrier: 123133,
   createdByZapier: 123078,
   printSalesOrder: 123079,
@@ -94,6 +95,7 @@ function getParsedOrder() {
     shippingAmount: getInputValue(['shippingAmount', 'Shipping Amount']),
     orderTotal: getInputValue(['orderTotal', 'Order Total']),
     poNumber: getInputValue(['poNumber', 'PO Number']),
+    billToAccount: getInputValue(['billToAccount', 'Bill to Account']),
     advancedOptions: parseJson(getInputValue(['advancedOptions', 'Advanced Options'])) || {},
   };
 
@@ -161,23 +163,57 @@ function normalizeOrder(order, routing, normalizedItems, normalizedCarrierCode) 
     shippingAmount: toNumber(order.shippingAmount),
     orderTotal: toNumber(order.orderTotal),
     poNumber: cleanString(order.poNumber),
-    tagIds: buildTagIds(routing, normalizedCarrierCode),
-    advancedOptions: {
-      storeId: routing ? routing.storeId : null,
-      source: sourceCompany,
-    },
+    tagIds: buildTagIds(routing, normalizedCarrierCode, getThirdPartyBillingOptions(order)),
+    advancedOptions: buildAdvancedOptions(order, routing, sourceCompany, normalizedCarrierCode),
   };
-
-  if (normalizedCarrierCode) normalizedOrder.carrierCode = normalizedCarrierCode;
 
   return normalizedOrder;
 }
 
-function buildTagIds(routing, normalizedCarrierCode) {
+function buildAdvancedOptions(order, routing, sourceCompany, normalizedCarrierCode) {
+  const advancedOptions = Object.assign({}, getPlainObject(order && order.advancedOptions), {
+    storeId: routing ? routing.storeId : null,
+    source: sourceCompany,
+  });
+
+  if (normalizedCarrierCode) advancedOptions.customField1 = normalizedCarrierCode;
+
+  const thirdPartyBilling = getThirdPartyBillingOptions(order);
+
+  if (thirdPartyBilling && thirdPartyBilling.account) {
+    advancedOptions.billToParty = 'third_party';
+    advancedOptions.billToAccount = thirdPartyBilling.account;
+  }
+
+  return advancedOptions;
+}
+
+function getThirdPartyBillingOptions(order) {
+  const account = cleanString(
+    order && order.billToAccount ||
+    getPlainObject(order && order.advancedOptions).billToAccount
+  );
+  if (!account) return null;
+
+  return {
+    account
+  };
+}
+
+function getPlainObject(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value;
+}
+
+function buildTagIds(routing, normalizedCarrierCode, thirdPartyBilling) {
   const tagIds = routing && Array.isArray(routing.tagIds) ? routing.tagIds.slice() : [];
 
   if (normalizedCarrierCode && !tagIds.includes(SHIPSTATION_TAG_IDS.clientRequestedCarrier)) {
     tagIds.push(SHIPSTATION_TAG_IDS.clientRequestedCarrier);
+  }
+
+  if (thirdPartyBilling && !tagIds.includes(SHIPSTATION_TAG_IDS.billToThirdParty)) {
+    tagIds.push(SHIPSTATION_TAG_IDS.billToThirdParty);
   }
 
   return tagIds;
