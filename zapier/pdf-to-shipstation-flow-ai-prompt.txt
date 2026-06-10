@@ -1,0 +1,91 @@
+Extract order data from the provided PDF document to create a ShipStation order. The PDF may be formatted as an invoice, sales order, packing slip, purchase order, or wholesale order document. Please ensure to return ONLY valid JSON formatted data according to the structure defined below:
+
+{
+  "orderNumber": "",
+  "orderDate": "",
+  "orderStatus": "awaiting_shipment",
+  "customerUsername": "",
+  "customerEmail": "",
+  "customerNotes": "",
+  "internalNotes": "",
+  "paymentMethod": "",
+  "requestedShippingService": "",
+  "carrierCode": "",
+  "serviceCode": "",
+  "packageCode": "",
+  "confirmation": "none",
+  "shipDate": "",
+  "holdUntilDate": "",
+  "storeName": "",
+  "weight": {
+    "value": 0,
+    "units": "ounces"
+  },
+  "billTo": {
+    "name": "",
+    "company": "",
+    "street1": "",
+    "street2": "",
+    "city": "",
+    "state": "",
+    "postalCode": "",
+    "country": "",
+    "phone": ""
+  },
+  "shipTo": {
+    "name": "",
+    "company": "",
+    "street1": "",
+    "street2": "",
+    "city": "",
+    "state": "",
+    "postalCode": "",
+    "country": "",
+    "phone": ""
+  },
+  "items": [
+    {
+      "sku": "",
+      "name": "",
+      "quantity": 0,
+      "unitPrice": 0
+    }
+  ],
+  "amountPaid": 0,
+  "taxAmount": 0,
+  "shippingAmount": 0,
+  "orderTotal": 0,
+  "poNumber": "",
+  "advancedOptions": {
+    "storeId": "",
+    "billToAccount": "",
+  }
+}
+
+Address Rules:
+- Split addresses into discrete fields: street1 contains the street/building, street2 is for the apartment/suite/unit, and city, state, postalCode, and country have their respective singular values.
+
+Extraction Rules:
+- Identify the order number utilizing common labels such as "Order #", "ORDER NO", "Invoice", or "S.O. No.".
+- Extract all product rows from tabular data in the document.
+- SKU may be recorded as SKU, UPC, Item Code, or Product Code; use the UPC if the SKU is absent. Ensure quantities and pricing are numeric values.
+
+Customer Email Rules:
+- Capture ONLY the email address of the customer or buyer, excluding any seller/store/vendor/company emails. Avoid emails found in headers, footers, logos, support sections, payment sections, or remittance documentation.
+- The extracted email must belong to "Bill To", "Ship To", purchaser, or buyer. If multiples exist, preference should be given to the email closest to the billing/shipping information.
+- If the shipping destination is a commercial entity or business, assign its value to `shipTo.name` and leave `shipTo.company` empty unless an explicit legal name is provided.
+- If no clear customer email is located, return null. Conform to country codes in 2-digit format for full country names, and ensure that `billTo.name` is populated from `shipTo.name`. Maintain the original formatting of SKUs, especially if they include "Kit" (e.g., RREF-1QT Kit).
+- Return null for any missing fields.
+- Return ONLY valid JSON.
+- Capture carrierCode.
+- Do NOT trim, normalize, split, abbreviate, or remove words from SKU values.
+- Preserve suffixes such as "Kit", "Set", "Pack", "Bundle", or similar terms if they appear in the original SKU.
+- If the SKU value is RREF-1QT Kit, return exactly RREF-1QT Kit.
+- Do NOT stop SKU extraction at spaces or hyphens. Capture the complete SKU string from the product row exactly as displayed.
+- Extract the third-party shipping account details and add them under billToAccount. Look for shipping account references formatted as: FedEx Shipping #XXXXXXXX and only extract the account number.
+- Always extract and populate `storeName`.
+- Look for the seller, vendor, merchant, supplier, store, brand, company, or business name appearing in the document header, logo area, invoice issuer section, order source section, or remittance/seller information.
+- The store name should represent the company issuing the invoice/order, not the customer, bill-to party, or ship-to recipient.
+- If multiple company names appear, prefer the entity identified as the seller, vendor, merchant, supplier, or invoice issuer.
+- Do not use customer names, shipping destinations, distributors, or carriers as the store name.
+- Preserve the store name exactly as displayed, including punctuation, capitalization, and legal suffixes (Inc., LLC, Ltd., Corp., etc.).
