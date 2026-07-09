@@ -145,8 +145,9 @@ function parseJson(value) {
 function normalizeOrder(order, routing, normalizedItems, normalizedCarrierCode) {
   if (!order) return null;
   const sourceCompany = cleanString(order.sourceCompany);
+  const shipstationOrderNumber = buildShipStationOrderNumber(order);
   const normalizedOrder = {
-    orderNumber: cleanString(order.orderNumber),
+    orderNumber: shipstationOrderNumber,
     orderKey: buildOrderKey(routing, order),
     orderDate: normalizeOrderDate(order.orderDate),
     orderStatus: 'on_hold',
@@ -226,6 +227,26 @@ function buildOrderKey(routing, order) {
   if (!storeId || !orderNumber) return '';
 
   return String(storeId) + '-' + orderNumber;
+}
+
+function buildShipStationOrderNumber(order) {
+  const orderNumber = cleanString(order && order.orderNumber);
+  const poNumber = normalizePoNumberForOrderNumber(order && order.poNumber);
+  if (!orderNumber || !poNumber) return orderNumber;
+
+  const normalizedOrderNumber = normalizeForMatch(orderNumber);
+  const normalizedPoNumber = normalizeForMatch(poNumber);
+  if (normalizedOrderNumber.includes('po ' + normalizedPoNumber)) return orderNumber;
+
+  return orderNumber + ' PO ' + poNumber;
+}
+
+function normalizePoNumberForOrderNumber(value) {
+  return cleanString(value)
+    .replace(/^(?:p[./]?\s*o\.?|purchase\s+order)\s*(?:number|num|no\.?|#)?\s*[:#-]?\s*/i, '')
+    .replace(/\u2026/g, '...')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 
