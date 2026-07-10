@@ -67,6 +67,10 @@ Address Rules:
 
 Extraction Rules:
 - Identify the order number utilizing common labels such as "Order #", "ORDER NO", "Invoice", or "S.O. No.".
+- Extract the purchase order number into `poNumber` whenever present. Look for labels and variations such as "PO #", "P.O. #", "P.O. No.", "PO No", "PO Number", "Po Number", "Purchase Order #", "Purchase Order Number", or "WFM PO#".
+- Preserve PO number formatting exactly, including hyphens. For example, return "502-111" as "502-111", not "502111".
+- PO values may contain numbers, letters, words, or mixed text. Preserve alphabetic PO values exactly.
+- If a PO value contains an ellipsis, preserve it as part of the PO text. For example, "samples for sum..." is a valid PO value.
 - Extract all product rows from tabular data in the document.
 - SKU may be recorded as SKU, UPC, Item Code, or Product Code; use the UPC if the SKU is absent. Ensure quantities and pricing are numeric values.
 
