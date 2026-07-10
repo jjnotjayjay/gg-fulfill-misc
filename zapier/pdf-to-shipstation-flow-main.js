@@ -232,13 +232,19 @@ function buildOrderKey(routing, order) {
 function buildShipStationOrderNumber(order) {
   const orderNumber = cleanString(order && order.orderNumber);
   const poNumber = normalizePoNumberForOrderNumber(order && order.poNumber);
-  if (!orderNumber || !poNumber) return orderNumber;
+  if (!orderNumber || !poNumber) return limitShipStationOrderNumber(orderNumber);
 
   const normalizedOrderNumber = normalizeForMatch(orderNumber);
   const normalizedPoNumber = normalizeForMatch(poNumber);
-  if (normalizedOrderNumber.includes('po ' + normalizedPoNumber)) return orderNumber;
+  if (normalizedOrderNumber.includes('po ' + normalizedPoNumber)) {
+    return limitShipStationOrderNumber(orderNumber);
+  }
 
-  return orderNumber + ' PO ' + poNumber;
+  return limitShipStationOrderNumber(orderNumber + ' PO ' + poNumber);
+}
+
+function limitShipStationOrderNumber(value) {
+  return cleanString(value).slice(0, 50);
 }
 
 function normalizePoNumberForOrderNumber(value) {
