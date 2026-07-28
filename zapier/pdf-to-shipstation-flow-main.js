@@ -150,7 +150,7 @@ function normalizeOrder(order, routing, normalizedItems, normalizedCarrierCode) 
     orderNumber: shipstationOrderNumber,
     orderKey: buildOrderKey(routing, order),
     orderDate: normalizeOrderDate(order.orderDate),
-    orderStatus: 'on_hold',
+    orderStatus: 'awaiting_shipment',
     customerUsername: cleanString(order.customerUsername),
     customerEmail: cleanString(order.customerEmail),
     customerNotes: cleanString(order.customerNotes),
