@@ -57,22 +57,24 @@ const shipstationOrder = canCreateOrder(parsedOrder, normalizedItemsResult.items
   ? normalizeOrder(parsedOrder, routing, normalizedItemsResult.items, normalizedCarrierCode)
   : null;
 
-if (!parsedOrder) reviewReasons.push('Missing order inputs.');
-if (parsedOrder && !cleanString(parsedOrder.orderNumber)) reviewReasons.push('Missing order number.');
-if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.street1)) reviewReasons.push('Missing ship-to street1.');
-if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.city)) reviewReasons.push('Missing ship-to city.');
-if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.state)) reviewReasons.push('Missing ship-to state.');
-if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.postalCode)) reviewReasons.push('Missing ship-to postal code.');
-if (parsedOrder && (!Array.isArray(parsedOrder.items) || !parsedOrder.items.length)) reviewReasons.push('Missing line items.');
-if (parsedOrder && cleanString(parsedOrder.carrierCode) && !normalizedCarrierCode) reviewReasons.push('Unrecognized carrierCode: ' + cleanString(parsedOrder.carrierCode) + '.');
+if (!parsedOrder) reviewReasons.push('Could not parse order from PDF — missing order number, ship-to address, or line items.');
+if (parsedOrder && !cleanString(parsedOrder.orderNumber)) reviewReasons.push('Order number is missing or blank.');
+if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.street1)) reviewReasons.push('Ship-to address incomplete: missing street address.');
+if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.city)) reviewReasons.push('Ship-to address incomplete: missing city.');
+if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.state)) reviewReasons.push('Ship-to address incomplete: missing state.');
+if (parsedOrder && !cleanString(parsedOrder.shipTo && parsedOrder.shipTo.postalCode)) reviewReasons.push('Ship-to address incomplete: missing postal/ZIP code.');
+if (parsedOrder && (!Array.isArray(parsedOrder.items) || !parsedOrder.items.length)) reviewReasons.push('No line items found on order.');
+if (parsedOrder && cleanString(parsedOrder.carrierCode) && !normalizedCarrierCode) reviewReasons.push('Unrecognized carrier "' + cleanString(parsedOrder.carrierCode) + '". Expected: FedEx, UPS, USPS, DHL, OnTrac, or Canada Post.');
 if (normalizedItemsResult.issues.length) reviewReasons.push.apply(reviewReasons, normalizedItemsResult.issues);
 
 output = [{
   shipstationCreateOrderApiCallBody: JSON.stringify(shipstationOrder || {}),
-  orderNumber: shipstationOrder ? shipstationOrder.orderNumber : '',
+  orderNumber: shipstationOrder ? shipstationOrder.orderNumber : cleanString(parsedOrder && parsedOrder.orderNumber),
   storeId: routing ? routing.storeId : '',
+  sourceCompany: cleanString(parsedOrder && parsedOrder.sourceCompany),
+  pdfUrl: pdfUrl,
   requiresManualReview: reviewReasons.length > 0,
-  manualReviewReasons: reviewReasons.join(' | '),
+  manualReviewReasons: reviewReasons.join('<br />'),
 }];
 
 function getParsedOrder() {
@@ -509,7 +511,7 @@ function normalizeItems(items) {
   if (!Array.isArray(items)) {
     return {
       items: [],
-      issues: ['Items payload is not a valid array.'],
+      issues: ['Line items could not be parsed — expected a JSON array but received invalid or malformed data.'],
     };
   }
 
@@ -517,7 +519,7 @@ function normalizeItems(items) {
   const issues = [];
 
   items.forEach((item, index) => {
-    const sku = cleanString(item && item.sku);
+    const sku = stripQuotes(cleanString(item && item.sku));
     const name = cleanString(item && item.name);
     const quantity = parseNumberOrNull(item && item.quantity);
     const unitPrice = parseNumberOrNull(item && item.unitPrice);
@@ -530,11 +532,11 @@ function normalizeItems(items) {
 
     if (missingFields.length) {
       issues.push(
-        'Line item ' +
+        'Line item #' +
           (index + 1) +
-          ' skipped: missing or invalid ' +
+          ' skipped — missing or invalid: ' +
           missingFields.join(', ') +
-          '.'
+          '. Required fields: sku, name, quantity, unitPrice.'
       );
       return;
     }
@@ -566,6 +568,10 @@ function getInputValue(names) {
 function cleanString(value) {
   if (value === null || value === undefined) return '';
   return String(value).trim();
+}
+
+function stripQuotes(value) {
+  return cleanString(value).replace(/["'\u201C\u201D\u2018\u2019]/g, '').trim();
 }
 
 function normalizeForMatch(value) {
