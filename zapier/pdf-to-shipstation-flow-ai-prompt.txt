@@ -66,6 +66,8 @@ Address Rules:
 - Split addresses into discrete fields: street1 contains the street/building, street2 is for the apartment/suite/unit, and city, state, postalCode, and country have their respective singular values.
 
 Extraction Rules:
+- Ignore all dates found in the PDF, including Order Date, Ship Date, Invoice Date, Due Date, Delivery Date, and any other document dates.
+- Always return null for `orderDate` and `shipDate`; ShipStation will set the created/order date when the order is created, and the shipping label flow will control the actual ship date.
 - Identify the order number utilizing common labels such as "Order #", "ORDER NO", "Invoice", or "S.O. No.".
 - Extract the purchase order number into `poNumber` whenever present. Look for labels and variations such as "PO #", "P.O. #", "P.O. No.", "PO No", "PO Number", "Po Number", "Purchase Order #", "Purchase Order Number", or "WFM PO#".
 - Preserve PO number formatting exactly, including hyphens. For example, return "502-111" as "502-111", not "502111".
