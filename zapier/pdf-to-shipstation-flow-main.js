@@ -151,13 +151,12 @@ function normalizeOrder(order, routing, normalizedItems, normalizedCarrierCode) 
   const normalizedOrder = {
     orderNumber: shipstationOrderNumber,
     orderKey: buildOrderKey(routing, order),
-    orderDate: normalizeOrderDate(order.orderDate),
+    orderDate: getCurrentShipStationOrderDate(),
     orderStatus: 'awaiting_shipment',
     customerUsername: cleanString(order.customerUsername),
     customerEmail: cleanString(order.customerEmail),
     customerNotes: cleanString(order.customerNotes),
     internalNotes: [pdfUrl, cleanString(order.internalNotes), 'DEV TEST - DO NOT SHIP'].filter(Boolean).join('\n'),
-    shipDate: normalizeOptionalIsoDate(order.shipDate),
     billTo: normalizeAddress(order.billTo),
     shipTo: normalizeAddress(order.shipTo),
     items: normalizedItems,
@@ -258,9 +257,7 @@ function normalizePoNumberForOrderNumber(value) {
 }
 
 
-function normalizeOrderDate(value) {
-  const orderDate = normalizeOptionalIsoDate(value);
-  if (orderDate) return orderDate;
+function getCurrentShipStationOrderDate() {
   return formatPstDateTime(new Date());
 }
 
