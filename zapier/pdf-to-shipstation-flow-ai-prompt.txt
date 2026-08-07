@@ -74,24 +74,34 @@ Extraction Rules:
 - PO values may contain numbers, letters, words, or mixed text. Preserve alphabetic PO values exactly.
 - If a PO value contains an ellipsis, preserve it as part of the PO text. For example, "samples for sum..." is a valid PO value.
 - Extract all product rows from tabular data in the document.
-- SKU may be recorded as SKU, UPC, Item Code, or Product Code; use the UPC if the SKU is absent. Ensure quantities and pricing are numeric values.
+- Ensure quantities and pricing are numeric values.
+
+SKU Rules:
+- The SKU is the COMPLETE, verbatim contents of the product row's item-identifier column. This column may be labeled "Item", "SKU", "UPC", "Item Code", or "Product Code". If no dedicated item/SKU column exists, use the UPC.
+- The SKU value frequently spans multiple words, for example an item code followed by a product name (such as an item number and its style/color). Treat the ENTIRE cell for that row as one single SKU value.
+- Capture the value exactly as displayed, character for character: all numbers, letters, spaces, hyphens, punctuation, and trailing words. Do NOT trim, split, abbreviate, normalize, reorder, or drop any words.
+- Do NOT stop at the first space, hyphen, number group, or where the value appears to end. Continue capturing to the end of the cell.
+- Preserve suffixes and descriptors such as "Kit", "Set", "Pack", "Bundle", "Blue", or any other trailing word exactly as they appear.
+- NEVER include an ellipsis ("...") at the end of the SKU. An ellipsis appearing in the source is display truncation, not part of the value. Always resolve to the full underlying item value from that row. If the complete value is genuinely unavailable, return only the characters actually present and do not append "...".
+- Worked examples of CORRECT capture:
+  - Item column shows "16-032-0010 Sharkbites Blue" -> "sku": "16-032-0010 Sharkbites Blue"
+  - Item column shows "RREF-1QT Kit" -> "sku": "RREF-1QT Kit"
 
 Customer Email Rules:
 - Capture ONLY the email address of the customer or buyer, excluding any seller/store/vendor/company emails. Avoid emails found in headers, footers, logos, support sections, payment sections, or remittance documentation.
 - The extracted email must belong to "Bill To", "Ship To", purchaser, or buyer. If multiples exist, preference should be given to the email closest to the billing/shipping information.
+- If no clear customer email is located, return null.
+
+Additional Rules:
 - If the shipping destination is a commercial entity or business, assign its value to `shipTo.name` and leave `shipTo.company` empty unless an explicit legal name is provided.
-- If no clear customer email is located, return null. Conform to country codes in 2-digit format for full country names, and ensure that `billTo.name` is populated from `shipTo.name`. Maintain the original formatting of SKUs, especially if they include "Kit" (e.g., RREF-1QT Kit).
-- Return null for any missing fields.
-- Return ONLY valid JSON.
-- Capture carrierCode.
-- Do NOT trim, normalize, split, abbreviate, or remove words from SKU values.
-- Preserve suffixes such as "Kit", "Set", "Pack", "Bundle", or similar terms if they appear in the original SKU.
-- If the SKU value is RREF-1QT Kit, return exactly RREF-1QT Kit.
-- Do NOT stop SKU extraction at spaces or hyphens. Capture the complete SKU string from the product row exactly as displayed.
+- Conform to country codes in 2-digit format for full country names, and ensure that `billTo.name` is populated from `shipTo.name`.
 - Extract the third-party shipping account details and add them under billToAccount. Look for shipping account references formatted as: FedEx Shipping #XXXXXXXX and only extract the account number.
+- Capture carrierCode.
 - Always extract and populate `storeName`.
 - Look for the seller, vendor, merchant, supplier, store, brand, company, or business name appearing in the document header, logo area, invoice issuer section, order source section, or remittance/seller information.
 - The store name should represent the company issuing the invoice/order, not the customer, bill-to party, or ship-to recipient.
 - If multiple company names appear, prefer the entity identified as the seller, vendor, merchant, supplier, or invoice issuer.
 - Do not use customer names, shipping destinations, distributors, or carriers as the store name.
 - Preserve the store name exactly as displayed, including punctuation, capitalization, and legal suffixes (Inc., LLC, Ltd., Corp., etc.).
+- Return null for any missing fields.
+- Return ONLY valid JSON.
