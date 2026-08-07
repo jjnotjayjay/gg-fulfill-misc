@@ -156,7 +156,7 @@ function normalizeOrder(order, routing, normalizedItems, normalizedCarrierCode) 
     customerUsername: cleanString(order.customerUsername),
     customerEmail: cleanString(order.customerEmail),
     customerNotes: cleanString(order.customerNotes),
-    internalNotes: [pdfUrl, cleanString(order.internalNotes), 'DEV TEST - DO NOT SHIP'].filter(Boolean).join('\n'),
+    internalNotes: [pdfUrl, cleanString(order.internalNotes)].filter(Boolean).join('\n'),
     billTo: normalizeAddress(order.billTo),
     shipTo: normalizeAddress(order.shipTo),
     items: normalizedItems,
