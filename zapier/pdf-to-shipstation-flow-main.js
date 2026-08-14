@@ -519,7 +519,7 @@ function normalizeItems(items, routing) {
 
   items.forEach((item, index) => {
     const rawSku = stripQuotes(cleanString(item && item.sku));
-    if (shouldSkipLineItem(rawSku)) return;
+    if (shouldSkipLineItem(rawSku, routing)) return;
 
     const sku = normalizeSku(rawSku, routing);
     const name = cleanString(item && item.name);
@@ -557,7 +557,8 @@ function normalizeItems(items, routing) {
   };
 }
 
-function shouldSkipLineItem(sku) {
+function shouldSkipLineItem(sku, routing) {
+  if (!routing || routing.skuFormat !== 'firstNumberBlock') return false;
   return /^disc(?:\b|\s*[-#:]?\s*\d)/i.test(cleanString(sku));
 }
 

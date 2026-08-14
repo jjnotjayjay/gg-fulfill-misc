@@ -74,7 +74,7 @@ Extraction Rules:
 - PO values may contain numbers, letters, words, or mixed text. Preserve alphabetic PO values exactly.
 - If a PO value contains an ellipsis, preserve it as part of the PO text. For example, "samples for sum..." is a valid PO value.
 - Extract all product rows from tabular data in the document.
-- Skip discount, adjustment, or credit rows. Do not return line items with SKUs or item codes like "DISC", "DISC - 10", "Discount", or similar non-product discount entries.
+- For Mobi USA LLC, Mobi USA, or Mobi orders only, skip discount, adjustment, or credit rows. Do not return line items with SKUs or item codes like "DISC", "DISC - 10", "Discount", or similar non-product discount entries.
 - Ensure quantities and pricing are numeric values.
 
 SKU Rules:
