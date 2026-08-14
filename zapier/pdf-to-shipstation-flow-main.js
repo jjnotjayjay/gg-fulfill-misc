@@ -604,6 +604,7 @@ function getCarrierCode(value) {
 
   const carrierMap = {
     fedex: 'fedex',
+    'fed ex': 'fedex',
     'federal express': 'fedex',
     ups: 'ups',
     'united parcel service': 'ups',
