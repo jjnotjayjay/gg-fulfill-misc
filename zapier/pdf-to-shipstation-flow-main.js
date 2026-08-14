@@ -50,9 +50,9 @@ const pdfUrl = getInputValue(['pdf_url']);
 
 const reviewReasons = [];
 const parsedOrder = getParsedOrder();
-const normalizedItemsResult = normalizeItems(parsedOrder && parsedOrder.items);
-const normalizedCarrierCode = getCarrierCode(parsedOrder && parsedOrder.carrierCode);
 const routing = resolveRouting(parsedOrder);
+const normalizedItemsResult = normalizeItems(parsedOrder && parsedOrder.items, routing);
+const normalizedCarrierCode = getCarrierCode(parsedOrder && parsedOrder.carrierCode);
 const shipstationOrder = canCreateOrder(parsedOrder, normalizedItemsResult.items)
   ? normalizeOrder(parsedOrder, routing, normalizedItemsResult.items, normalizedCarrierCode)
   : null;
@@ -436,6 +436,7 @@ function resolveRouting(order) {
       storeName: 'Mobi USA Quickbooks',
       storeId:511893,
       tagIds: [SHIPSTATION_TAG_IDS.createdByZapier],
+      skuFormat: 'firstNumberBlock',
     },
     {
       sourceCompanies: ['munchrooms', 'Munchrooms'],
@@ -474,6 +475,7 @@ function buildRoutingResult(route, matchedBy) {
     matchedBy,
     storeName: route.storeName,
     storeId: route.storeId,
+    skuFormat: route.skuFormat || '',
     tagIds: Array.isArray(route.tagIds)
       ? route.tagIds.filter((tagId) => Number.isInteger(tagId))
       : [],
@@ -504,7 +506,7 @@ function normalizeAddress(address) {
   };
 }
 
-function normalizeItems(items) {
+function normalizeItems(items, routing) {
   if (!Array.isArray(items)) {
     return {
       items: [],
@@ -516,7 +518,10 @@ function normalizeItems(items) {
   const issues = [];
 
   items.forEach((item, index) => {
-    const sku = stripQuotes(cleanString(item && item.sku));
+    const rawSku = stripQuotes(cleanString(item && item.sku));
+    if (shouldSkipLineItem(rawSku, routing)) return;
+
+    const sku = normalizeSku(rawSku, routing);
     const name = cleanString(item && item.name);
     const quantity = parseNumberOrNull(item && item.quantity);
     const unitPrice = parseNumberOrNull(item && item.unitPrice);
@@ -550,6 +555,21 @@ function normalizeItems(items) {
     items: normalizedItems,
     issues,
   };
+}
+
+function shouldSkipLineItem(sku, routing) {
+  if (!routing || routing.skuFormat !== 'firstNumberBlock') return false;
+  return /^disc(?:\b|\s*[-#:]?\s*\d)/i.test(cleanString(sku));
+}
+
+function normalizeSku(sku, routing) {
+  if (!sku) return '';
+  if (routing && routing.skuFormat === 'firstNumberBlock') {
+    const firstNumberBlock = sku.split(/\s+/).find((part) => /^\d/.test(part));
+    return firstNumberBlock || '';
+  }
+
+  return sku;
 }
 
 function getInputValue(names) {
