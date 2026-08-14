@@ -74,13 +74,15 @@ Extraction Rules:
 - PO values may contain numbers, letters, words, or mixed text. Preserve alphabetic PO values exactly.
 - If a PO value contains an ellipsis, preserve it as part of the PO text. For example, "samples for sum..." is a valid PO value.
 - Extract all product rows from tabular data in the document.
+- Skip discount, adjustment, or credit rows. Do not return line items with SKUs or item codes like "DISC", "DISC - 10", "Discount", or similar non-product discount entries.
 - Ensure quantities and pricing are numeric values.
 
 SKU Rules:
 - The SKU is the COMPLETE, verbatim contents of the product row's item-identifier column. This column may be labeled "Item", "SKU", "UPC", "Item Code", or "Product Code". If no dedicated item/SKU column exists, use the UPC.
+- Exception for Mobi USA LLC, Mobi USA, or Mobi orders: return only the first block of non-space characters that starts with a number from the item-identifier value. Example: "16-032-0010 Sharkbites Blue" -> "sku": "16-032-0010". If the row starts with text exmaple: DISC - 10 skip that item.
 - The SKU value frequently spans multiple words, for example an item code followed by a product name (such as an item number and its style/color). Treat the ENTIRE cell for that row as one single SKU value.
 - Capture the value exactly as displayed, character for character: all numbers, letters, spaces, hyphens, punctuation, and trailing words. Do NOT trim, split, abbreviate, normalize, reorder, or drop any words.
-- Do NOT stop at the first space, hyphen, number group, or where the value appears to end. Continue capturing to the end of the cell.
+- For non-Mobi orders, do NOT stop at the first space, hyphen, number group, or where the value appears to end. Continue capturing to the end of the cell.
 - Preserve suffixes and descriptors such as "Kit", "Set", "Pack", "Bundle", "Blue", or any other trailing word exactly as they appear.
 - NEVER include an ellipsis ("...") at the end of the SKU. An ellipsis appearing in the source is display truncation, not part of the value. Always resolve to the full underlying item value from that row. If the complete value is genuinely unavailable, return only the characters actually present and do not append "...".
 - Worked examples of CORRECT capture:
