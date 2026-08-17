@@ -96,7 +96,8 @@ Customer Email Rules:
 
 Additional Rules:
 - If the shipping destination is a commercial entity or business, assign its value to `shipTo.name` and leave `shipTo.company` empty unless an explicit legal name is provided.
-- Conform to country codes in 2-digit format for full country names, and ensure that `billTo.name` is populated from `shipTo.name`.
+- Always return `billTo.country` and `shipTo.country` as the ISO 3166-1 alpha-2 two-letter code derived from the document (e.g. "US", never "USA" or "United States"; "CA" for Canada, never "CAN"; "GB" for the United Kingdom). Convert any full country name or 3-letter code to its 2-letter code. If the document does not indicate a country, default both to "US".
+- Ensure that `billTo.name` is populated from `shipTo.name`.
 - Extract the third-party shipping account details and add them under billToAccount. Look for shipping account references formatted as: FedEx Shipping #XXXXXXXX and only extract the account number.
 - Capture carrierCode.
 - Always extract and populate `storeName`.

@@ -501,9 +501,55 @@ function normalizeAddress(address) {
     city: cleanString(address.city),
     state: cleanString(address.state),
     postalCode: cleanString(address.postalCode),
-    country: cleanString(address.country),
+    country: normalizeCountry(address.country),
     phone: cleanString(address.phone),
   };
+}
+
+function normalizeCountry(value) {
+  const raw = cleanString(value);
+  if (!raw) return 'US';
+
+  const normalized = raw.toLowerCase().replace(/[^a-z]/g, '');
+  if (!normalized) return 'US';
+
+  const countryMap = {
+    usa: 'US', unitedstates: 'US', unitedstatesofamerica: 'US', america: 'US',
+    can: 'CA', canada: 'CA',
+    mex: 'MX', mexico: 'MX',
+    uk: 'GB', gbr: 'GB', unitedkingdom: 'GB', greatbritain: 'GB', england: 'GB', scotland: 'GB', wales: 'GB',
+    aus: 'AU', australia: 'AU',
+    nzl: 'NZ', newzealand: 'NZ',
+    deu: 'DE', ger: 'DE', germany: 'DE',
+    fra: 'FR', france: 'FR',
+    ita: 'IT', italy: 'IT',
+    esp: 'ES', spain: 'ES',
+    nld: 'NL', netherlands: 'NL', holland: 'NL',
+    irl: 'IE', ireland: 'IE',
+    jpn: 'JP', japan: 'JP',
+    chn: 'CN', china: 'CN',
+    ind: 'IN', india: 'IN',
+    bra: 'BR', brazil: 'BR',
+    che: 'CH', switzerland: 'CH',
+    swe: 'SE', sweden: 'SE',
+    nor: 'NO', norway: 'NO',
+    dnk: 'DK', denmark: 'DK',
+    fin: 'FI', finland: 'FI',
+    bel: 'BE', belgium: 'BE',
+    aut: 'AT', austria: 'AT',
+    prt: 'PT', portugal: 'PT',
+    pol: 'PL', poland: 'PL',
+    kor: 'KR', southkorea: 'KR', republicofkorea: 'KR',
+    sgp: 'SG', singapore: 'SG',
+    hkg: 'HK', hongkong: 'HK',
+    are: 'AE', uae: 'AE', unitedarabemirates: 'AE',
+    zaf: 'ZA', southafrica: 'ZA',
+  };
+
+  if (countryMap[normalized]) return countryMap[normalized];
+  if (/^[a-z]{2}$/.test(normalized)) return normalized.toUpperCase();
+
+  return raw;
 }
 
 function normalizeItems(items, routing) {
