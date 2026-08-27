@@ -46,6 +46,7 @@ run()
 async function run() {
   const authorizationHeader = getShipStationAuthorizationHeader();
   const reportDate = getReportDate();
+  const dateRange = buildDateRangeLabel(reportDate, reportDate);
 
   if (!authorizationHeader) {
     throw new Error(
@@ -65,12 +66,14 @@ async function run() {
     csvContent,
     csvFilename,
     recipientEmails: EMAIL_RECIPIENTS.join(','),
-    emailSubject: 'Mobi Daily Processed Orders Report - ' + reportDate,
-    emailBody: buildEmailBody(reportDate, reportShipments.length, totals),
+    emailSubject: 'Mobi Daily Processed Orders Report - ' + dateRange,
+    emailBody: buildEmailBody(dateRange, reportShipments.length, totals),
     shipmentCount: reportShipments.length,
     carrierFeeTotal: formatMoney(totals.carrierFee),
     feePlusFiveTotal: formatMoney(totals.feePlusFive),
     costTimesOnePointThreeTotal: formatMoney(totals.costTimesOnePointThree),
+    dateRange,
+    DATE_RANGE: dateRange,
     reportDate,
     storeId: MOBI_QUICKBOOKS_STORE_ID,
     storeName: MOBI_QUICKBOOKS_STORE_NAME,
@@ -151,7 +154,7 @@ function buildCsvRow(shipment) {
   const dimensions = getPlainObject(shipment.dimensions);
   const carrierFee = toNumber(shipment.shipmentCost);
   const feePlusFive = carrierFee + 5;
-  const costTimesOnePointThree = carrierFee * 1.3;
+  const costTimesOnePointThree = feePlusFive * 1.3;
 
   return {
     'Store Name': cleanString(shipment.storeName) || MOBI_QUICKBOOKS_STORE_NAME,
@@ -179,16 +182,21 @@ function buildCsvRow(shipment) {
 }
 
 function calculateTotals(rows) {
-  return rows.reduce(function(totals, row) {
+  const totals = rows.reduce(function(totals, row) {
     totals.carrierFee += toNumber(row['Carrier Fee']);
-    totals.feePlusFive += toNumber(row['Fee+$5']);
-    totals.costTimesOnePointThree += toNumber(row['Cost * 1.3']);
+    totals.shipmentCount += 1;
     return totals;
   }, {
     carrierFee: 0,
     feePlusFive: 0,
     costTimesOnePointThree: 0,
+    shipmentCount: 0,
   });
+
+  totals.feePlusFive = totals.carrierFee + (totals.shipmentCount * 5);
+  totals.costTimesOnePointThree = totals.feePlusFive * 1.3;
+
+  return totals;
 }
 
 function buildCsv(rows, totals) {
@@ -201,19 +209,67 @@ function buildCsv(rows, totals) {
   });
 
   if (rows.length) {
-    const totalRow = CSV_HEADERS.map(function(header) {
-      if (header === 'Store Name') return 'Total';
-      if (header === 'Carrier Fee') return formatMoney(totals.carrierFee);
-      if (header === 'Fee+$5') return formatMoney(totals.feePlusFive);
-      if (header === 'Cost * 1.3') return formatMoney(totals.costTimesOnePointThree);
-      return '';
+    csvRows.push([]);
+    csvRows.push(buildSectionHeaderRow('Per-Order Totals'));
+    calculateTotalsByOrder(rows).forEach(function(orderTotal) {
+      csvRows.push(buildTotalRow(orderTotal.orderNumber, orderTotal));
     });
 
     csvRows.push([]);
-    csvRows.push(totalRow);
+    csvRows.push(buildTotalRow('Grand Total', totals));
   }
 
   return csvRows.map(formatCsvRow).join('\n');
+}
+
+function calculateTotalsByOrder(rows) {
+  const totalsByOrderNumber = {};
+  const orderNumbers = [];
+
+  rows.forEach(function(row) {
+    const orderNumber = cleanString(row['Order Number']);
+    const orderKey = orderNumber || '(blank)';
+
+    if (!totalsByOrderNumber[orderKey]) {
+      totalsByOrderNumber[orderKey] = {
+        orderNumber,
+        carrierFee: 0,
+        feePlusFive: 0,
+        costTimesOnePointThree: 0,
+        shipmentCount: 0,
+      };
+      orderNumbers.push(orderKey);
+    }
+
+    totalsByOrderNumber[orderKey].carrierFee += toNumber(row['Carrier Fee']);
+    totalsByOrderNumber[orderKey].shipmentCount += 1;
+  });
+
+  return orderNumbers.map(function(orderKey) {
+    totalsByOrderNumber[orderKey].feePlusFive =
+      totalsByOrderNumber[orderKey].carrierFee +
+      (totalsByOrderNumber[orderKey].shipmentCount * 5);
+    totalsByOrderNumber[orderKey].costTimesOnePointThree =
+      totalsByOrderNumber[orderKey].feePlusFive * 1.3;
+
+    return totalsByOrderNumber[orderKey];
+  });
+}
+
+function buildSectionHeaderRow(label) {
+  return CSV_HEADERS.map(function(header) {
+    return header === 'Order Number' ? label : '';
+  });
+}
+
+function buildTotalRow(orderNumber, totals) {
+  return CSV_HEADERS.map(function(header) {
+    if (header === 'Order Number') return orderNumber;
+    if (header === 'Carrier Fee') return formatMoney(totals.carrierFee);
+    if (header === 'Fee+$5') return formatMoney(totals.feePlusFive);
+    if (header === 'Cost * 1.3') return formatMoney(totals.costTimesOnePointThree);
+    return '';
+  });
 }
 
 function formatCsvRow(row) {
@@ -230,19 +286,47 @@ function escapeCsvValue(value) {
   return stringValue;
 }
 
-function buildEmailBody(reportDate, shipmentCount, totals) {
+function buildEmailBody(dateRange, shipmentCount, totals) {
   return [
-    'Mobi Daily Processed Orders Report for ' + reportDate,
+    'Hello Mobi team,',
     '',
-    'Shipments: ' + shipmentCount,
-    'Carrier Fee Total: $' + formatMoney(totals.carrierFee),
-    'Fee+$5 Total: $' + formatMoney(totals.feePlusFive),
-    'Cost * 1.3 Total: $' + formatMoney(totals.costTimesOnePointThree),
+    'Please find attached the daily processed orders report for ' +
+      dateRange +
+      ' for the Mobi Quickbooks store.',
+    '',
+    'A summary of the orders processed is as follows:',
+    '',
+    'Total Shipments: ' + shipmentCount,
+    'Total Carrier Fee: $' + formatMoney(totals.carrierFee),
+    'Total Carrier Fee (+$5): $' + formatMoney(totals.feePlusFive),
+    'Final Fee (Above x 1.3): $' + formatMoney(totals.costTimesOnePointThree),
+    '',
+    '',
+    'Best,',
+    'Nick & the GG Fulfillment Team',
   ].join('\n');
 }
 
 function getReportDate() {
   return getLosAngelesDateParts(new Date()).date;
+}
+
+function buildDateRangeLabel(startDate, endDate) {
+  const formattedStartDate = formatDisplayDate(startDate);
+  const formattedEndDate = formatDisplayDate(endDate);
+
+  if (!formattedStartDate || formattedStartDate === formattedEndDate) {
+    return formattedEndDate || formattedStartDate;
+  }
+
+  return formattedStartDate + ' through ' + formattedEndDate;
+}
+
+function formatDisplayDate(value) {
+  const match = cleanString(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return cleanString(value);
+
+  return match[2] + '/' + match[3] + '/' + match[1];
 }
 
 function getLosAngelesDateParts(date) {
