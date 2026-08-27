@@ -6,8 +6,9 @@ const REPORT_TIME_ZONE = 'America/Los_Angeles';
 const SHIPSTATION_SHIPMENTS_URL = 'https://ssapi.shipstation.com/shipments';
 const PAGE_SIZE = 500;
 const EMAIL_RECIPIENTS = [
-  'nick@yopmail.com',
-  'dennis@yopmail .com',
+  'nick@ggfulfill.com',
+  'dennis@ggfulfill.com',
+  'team+ggfulfill@bassettewebsolutions.com',
 ];
 const CSV_HEADERS = [
   'Store Name',
