@@ -68,7 +68,7 @@ async function run() {
     csvFilename,
     recipientEmails: EMAIL_RECIPIENTS.join(','),
     emailSubject: 'Mobi Daily Processed Orders Report - ' + dateRange,
-    emailBody: buildEmailBody(dateRange, reportShipments.length, totals),
+    emailBody: buildEmailBody(dateRange, reportShipments.length),
     shipmentCount: reportShipments.length,
     carrierFeeTotal: formatMoney(totals.carrierFee),
     feePlusFiveTotal: formatMoney(totals.feePlusFive),
@@ -287,25 +287,16 @@ function escapeCsvValue(value) {
   return stringValue;
 }
 
-function buildEmailBody(dateRange, shipmentCount, totals) {
+function buildEmailBody(dateRange, shipmentCount) {
   const safeDateRange = escapeHtml(dateRange);
   const safeShipmentCount = escapeHtml(shipmentCount);
-  const carrierFeeTotal = escapeHtml(formatMoney(totals.carrierFee));
-  const feePlusFiveTotal = escapeHtml(formatMoney(totals.feePlusFive));
-  const finalFeeTotal = escapeHtml(formatMoney(totals.costTimesOnePointThree));
 
   return [
     '<p>Hello Mobi team,</p>',
     '<p>Please find attached the daily processed orders report for ' +
       safeDateRange +
       ' for the Mobi Quickbooks store.</p>',
-    '<p>A summary of the orders processed is as follows:</p>',
-    '<p>',
-    'Total Shipments: <strong>' + safeShipmentCount + '</strong><br>',
-    'Total Carrier Fee: <strong>$' + carrierFeeTotal + '</strong><br>',
-    'Total Carrier Fee (+$5): <strong>$' + feePlusFiveTotal + '</strong><br>',
-    '<strong>Final Fee (Above x 1.3): $' + finalFeeTotal + '</strong>',
-    '</p>',
+    '<p>Total packages shipped: <strong>' + safeShipmentCount + '</strong></p>',
     '<p>Best,<br>Nick &amp; the GG Fulfillment Team</p>',
   ].join('');
 }
