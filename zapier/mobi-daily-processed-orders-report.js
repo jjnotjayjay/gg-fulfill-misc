@@ -57,7 +57,7 @@ async function run() {
 
   const shipments = await fetchShipmentsForReportDate(authorizationHeader, reportDate);
   const reportShipments = shipments.filter(isReportableShipment);
-  const rows = reportShipments.map(buildCsvRow);
+  const rows = reportShipments.map(buildCsvRow).sort(compareRowsByOrderNumber);
   const totals = calculateTotals(rows);
   const csvContent = buildCsv(rows, totals);
   const csvFilename = 'mobi-daily-processed-orders-report-' + reportDate + '.csv';
@@ -180,6 +180,14 @@ function buildCsvRow(shipment) {
     'Package Height': cleanString(dimensions.height),
     Zone: getShipmentZone(shipment),
   };
+}
+
+function compareRowsByOrderNumber(firstRow, secondRow) {
+  return cleanString(firstRow['Order Number']).localeCompare(
+    cleanString(secondRow['Order Number']),
+    undefined,
+    { numeric: true, sensitivity: 'base' }
+  );
 }
 
 function calculateTotals(rows) {
