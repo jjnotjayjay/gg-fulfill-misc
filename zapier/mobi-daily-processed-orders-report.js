@@ -57,7 +57,7 @@ async function run() {
 
   const shipments = await fetchShipmentsForReportDate(authorizationHeader, reportDate);
   const reportShipments = shipments.filter(isReportableShipment);
-  const rows = reportShipments.map(buildCsvRow);
+  const rows = reportShipments.map(buildCsvRow).sort(compareRowsByOrderNumber);
   const totals = calculateTotals(rows);
   const csvContent = buildCsv(rows, totals);
   const csvFilename = 'mobi-daily-processed-orders-report-' + reportDate + '.csv';
@@ -68,7 +68,7 @@ async function run() {
     csvFilename,
     recipientEmails: EMAIL_RECIPIENTS.join(','),
     emailSubject: 'Mobi Daily Processed Orders Report - ' + dateRange,
-    emailBody: buildEmailBody(dateRange, reportShipments.length, totals),
+    emailBody: buildEmailBody(dateRange, reportShipments.length),
     shipmentCount: reportShipments.length,
     carrierFeeTotal: formatMoney(totals.carrierFee),
     feePlusFiveTotal: formatMoney(totals.feePlusFive),
@@ -182,6 +182,14 @@ function buildCsvRow(shipment) {
   };
 }
 
+function compareRowsByOrderNumber(firstRow, secondRow) {
+  return cleanString(firstRow['Order Number']).localeCompare(
+    cleanString(secondRow['Order Number']),
+    undefined,
+    { numeric: true, sensitivity: 'base' }
+  );
+}
+
 function calculateTotals(rows) {
   const totals = rows.reduce(function(totals, row) {
     totals.carrierFee += toNumber(row['Carrier Fee']);
@@ -287,25 +295,16 @@ function escapeCsvValue(value) {
   return stringValue;
 }
 
-function buildEmailBody(dateRange, shipmentCount, totals) {
+function buildEmailBody(dateRange, shipmentCount) {
   const safeDateRange = escapeHtml(dateRange);
   const safeShipmentCount = escapeHtml(shipmentCount);
-  const carrierFeeTotal = escapeHtml(formatMoney(totals.carrierFee));
-  const feePlusFiveTotal = escapeHtml(formatMoney(totals.feePlusFive));
-  const finalFeeTotal = escapeHtml(formatMoney(totals.costTimesOnePointThree));
 
   return [
     '<p>Hello Mobi team,</p>',
     '<p>Please find attached the daily processed orders report for ' +
       safeDateRange +
       ' for the Mobi Quickbooks store.</p>',
-    '<p>A summary of the orders processed is as follows:</p>',
-    '<p>',
-    'Total Shipments: <strong>' + safeShipmentCount + '</strong><br>',
-    'Total Carrier Fee: <strong>$' + carrierFeeTotal + '</strong><br>',
-    'Total Carrier Fee (+$5): <strong>$' + feePlusFiveTotal + '</strong><br>',
-    '<strong>Final Fee (Above x 1.3): $' + finalFeeTotal + '</strong>',
-    '</p>',
+    '<p>Total packages shipped: <strong>' + safeShipmentCount + '</strong></p>',
     '<p>Best,<br>Nick &amp; the GG Fulfillment Team</p>',
   ].join('');
 }
