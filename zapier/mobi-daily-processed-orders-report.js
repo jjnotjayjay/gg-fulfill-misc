@@ -8,6 +8,7 @@ const PAGE_SIZE = 500;
 const EMAIL_RECIPIENTS = [
   'nick@ggfulfill.com',
   'dennis@ggfulfill.com',
+  'neal@mobicreations.com',
   'team+ggfulfill@bassettewebsolutions.com',
 ];
 const CSV_HEADERS = [
