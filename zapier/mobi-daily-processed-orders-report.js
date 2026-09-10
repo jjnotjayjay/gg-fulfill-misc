@@ -14,6 +14,7 @@ const EMAIL_CC_RECIPIENTS = [
   'neal@mobicreations.com',
   'team+ggfulfill@bassettewebsolutions.com',
 ];
+
 const CSV_HEADERS = [
   'Store Name',
   'Order Number',
