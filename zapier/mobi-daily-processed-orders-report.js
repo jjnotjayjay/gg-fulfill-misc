@@ -13,6 +13,7 @@ const EMAIL_CC_RECIPIENTS = [
   'dennis@ggfulfill.com',
   'team+ggfulfill@bassettewebsolutions.com',
 ];
+
 const CSV_HEADERS = [
   'Store Name',
   'Order Number',
