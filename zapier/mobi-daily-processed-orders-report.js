@@ -5,10 +5,12 @@ const MOBI_QUICKBOOKS_STORE_NAME = 'Mobi USA Quickbooks';
 const REPORT_TIME_ZONE = 'America/Los_Angeles';
 const SHIPSTATION_SHIPMENTS_URL = 'https://ssapi.shipstation.com/shipments';
 const PAGE_SIZE = 500;
-const EMAIL_RECIPIENTS = [
+const EMAIL_TO_RECIPIENTS = [
+  'neal@mobicreations.com',
+];
+const EMAIL_CC_RECIPIENTS = [
   'nick@ggfulfill.com',
   'dennis@ggfulfill.com',
-  'neal@mobicreations.com',
   'team+ggfulfill@bassettewebsolutions.com',
 ];
 const CSV_HEADERS = [
@@ -67,7 +69,8 @@ async function run() {
     shouldSendEmail: reportShipments.length > 0,
     csvContent,
     csvFilename,
-    recipientEmails: EMAIL_RECIPIENTS.join(','),
+    recipientEmails: EMAIL_TO_RECIPIENTS.join(','),
+    ccEmails: EMAIL_CC_RECIPIENTS.join(','),
     emailSubject: 'Mobi Daily Processed Orders Report - ' + dateRange,
     emailBody: buildEmailBody(dateRange, reportShipments.length),
     shipmentCount: reportShipments.length,
