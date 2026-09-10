@@ -9,10 +9,9 @@ const EMAIL_TO_RECIPIENTS = [
   'neal@mobicreations.com',
 ];
 const EMAIL_CC_RECIPIENTS = [
-  'nick@ggfulfill.com',
-  'dennis@ggfulfill.com',
-  'neal@mobicreations.com',
   'team+ggfulfill@bassettewebsolutions.com',
+  'dennis@ggfulfill.com',
+  'nick@ggfulfill.com',
 ];
 
 const CSV_HEADERS = [
