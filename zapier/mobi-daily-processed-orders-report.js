@@ -420,8 +420,17 @@ function formatWeight(weight) {
 
   const value = cleanString(weight.value);
   const units = cleanString(weight.units);
+  const numericValue = parseFloat(value.replace(/[^0-9.-]/g, ''));
+
+  if (!Number.isNaN(numericValue) && /^o(?:z\.?|unce|unces)$/i.test(units)) {
+    return formatPounds(numericValue / 16) + ' lbs';
+  }
 
   return [value, units].filter(Boolean).join(' ');
+}
+
+function formatPounds(value) {
+  return toNumber(value).toFixed(2).replace(/\.?0+$/, '');
 }
 
 function getInputValue(names) {
