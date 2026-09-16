@@ -81,13 +81,19 @@ SKU Rules:
 - The SKU is the COMPLETE, verbatim contents of the product row's item-identifier column. This column may be labeled "Item", "SKU", "UPC", "Item Code", or "Product Code". If no dedicated item/SKU column exists, use the UPC.
 - Exception for Mobi USA LLC, Mobi USA, or Mobi orders: return only the first block of non-space characters that starts with a number from the item-identifier value. Example: "16-032-0010 Sharkbites Blue" -> "sku": "16-032-0010". If the row starts with text exmaple: DISC - 10 skip that item.
 - The SKU value frequently spans multiple words, for example an item code followed by a product name (such as an item number and its style/color). Treat the ENTIRE cell for that row as one single SKU value.
-- Capture the value exactly as displayed, character for character: all numbers, letters, spaces, hyphens, punctuation, and trailing words. Do NOT trim, split, abbreviate, normalize, reorder, or drop any words.
+- Capture the value exactly as displayed: all numbers, letters, spaces, hyphens, periods, and trailing words. Do NOT split, abbreviate, reorder, or drop any words. The only permitted normalization is the allowed-character rule below (converting look-alike dashes to "-" and dropping disallowed characters).
 - For non-Mobi orders, do NOT stop at the first space, hyphen, number group, or where the value appears to end. Continue capturing to the end of the cell.
 - Preserve suffixes and descriptors such as "Kit", "Set", "Pack", "Bundle", "Blue", or any other trailing word exactly as they appear.
+- The item-identifier cell often WRAPS onto two (or more) lines because the column is narrow (common in QuickBooks invoices). Every wrapped continuation line within the cell still belongs to the SAME SKU. Reconstruct the full value within the cell across all wrapped lines; never treat a continuation line as the start of the DESCRIPTION or drop it.
+  - When a line breaks in the MIDDLE of a hyphenated code (the line ends with a hyphen, e.g. "RREDG-" then "600ML"), rejoin WITHOUT adding a space -> "RREDG-600ML".
+  - When the break falls at a word boundary (e.g. "RRES-2QT" then "Kit", or "RRES-2" then "Gal Kit"), rejoin WITH a single space -> "RRES-2QT Kit" / "RRES-2 Gal Kit".
+- Allowed SKU characters are letters (A-Z, a-z), digits (0-9), spaces, standard hyphens ("-"), and periods ("."). Convert any dash-like or look-alike glyph (en dash, em dash, minus sign, or any Unicode dash/box/rectangle character) to a standard hyphen ("-"). Drop any other character that is not in the allowed set. Example: a code that renders as "RRES□2" or "RRES–2" must be returned as "RRES-2".
 - NEVER include an ellipsis ("...") at the end of the SKU. An ellipsis appearing in the source is display truncation, not part of the value. Always resolve to the full underlying item value from that row. If the complete value is genuinely unavailable, return only the characters actually present and do not append "...".
 - Worked examples of CORRECT capture:
   - Item column shows "16-032-0010 Sharkbites Blue" -> "sku": "16-032-0010 Sharkbites Blue"
   - Item column shows "RREF-1QT Kit" -> "sku": "RREF-1QT Kit"
+  - Item column wraps as "RRES-2QT" / "Kit" (two lines) -> "sku": "RRES-2QT Kit"
+  - Item column wraps as "RREDG-" / "600ML" (two lines) -> "sku": "RREDG-600ML"
 
 Customer Email Rules:
 - Capture ONLY the email address of the customer or buyer, excluding any seller/store/vendor/company emails. Avoid emails found in headers, footers, logos, support sections, payment sections, or remittance documentation.

@@ -612,10 +612,20 @@ function normalizeSku(sku, routing) {
   if (!sku) return '';
   if (routing && routing.skuFormat === 'firstNumberBlock') {
     const firstNumberBlock = sku.split(/\s+/).find((part) => /^\d/.test(part));
-    return firstNumberBlock || '';
+    return sanitizeSkuCharacters(firstNumberBlock || '');
   }
 
-  return sku;
+  return sanitizeSkuCharacters(sku);
+}
+
+function sanitizeSkuCharacters(sku) {
+  return cleanString(sku)
+    .replace(/[\u2010-\u2015\u2212\u2043\u2E3A\u2E3B\uFE58\uFE63\uFF0D]/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/(?<=[A-Za-z0-9])[^A-Za-z0-9.\- ]+(?=[A-Za-z0-9])/g, '-')
+    .replace(/[^A-Za-z0-9.\- ]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function getInputValue(names) {
